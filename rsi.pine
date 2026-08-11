@@ -1,0 +1,228 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=6
+indicator("RSI + BB (EMA) + Dispersion (2.0) MTF", overlay = false, max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500)
+
+// ================================================================================================
+// بخش ۱: ورودی‌های کاربر — تنظیمات پایه RSI / BB / Dispersion
+// ================================================================================================
+//#region ———————————————————— INPUTS (BASE)
+
+var GRP1 = "RSI Settings"
+src      = input.source(close, 'Source', group = GRP1, tooltip = 'نوع قیمتی که برای محاسبه‌ی RSI استفاده می‌شود')
+for_rsi  = input.int(55, 'RSI Period', minval = 1, group = GRP1, tooltip = 'دوره‌ی محاسبه‌ی RSI')
+
+var GRP2 = "Bollinger Bands Settings"
+for_ma   = input.int(55, 'Basis BB (EMA Period)', minval = 1, group = GRP2, tooltip = 'دوره‌ی MA (به‌صورت EMA) داخل BB — این همان «خط میانگین» است که موقعیت RSI نسبت به آن روند را نشان می‌دهد')
+for_mult = input.int(2, 'Stdev Multiplier', minval = 1, maxval = 5, group = GRP2, tooltip = 'تعداد انحراف معیار برای BB')
+
+var GRP3 = "Dispersion Settings"
+for_sigma = input.float(0.05, 'Dispersion', minval = 0.01, maxval = 1.0, step = 0.01, group = GRP3, tooltip = 'داخل این ناحیه = رنج (امتیاز 0)')
+
+//#endregion
+
+// ================================================================================================
+// بخش ۱-ب: مولتی‌تایم‌فریم — ۵ تایم فریم همزمان
+// ================================================================================================
+//#region ———————————————————— INPUTS (MTF TREND)
+
+var GRP5 = "MTF Trend Detection (Final Target Trend)"
+enableTrendDetection = input.bool(true, 'Enable MTF Trend Detection', group = GRP5, tooltip = 'امتیاز همزمان 5 تایم‌فریم → جمع‌بندی → یک فلش لایو (مستقل از تایم‌فریم چارت)')
+
+tf1 = input.timeframe('1',  'Timeframe 1', group = GRP5, tooltip = 'کوچک‌ترین تایم‌فریم — لنگر محاسبات MTF')
+tf2 = input.timeframe('3',  'Timeframe 2', group = GRP5)
+tf3 = input.timeframe('5',  'Timeframe 3', group = GRP5)
+tf4 = input.timeframe('15', 'Timeframe 4', group = GRP5)
+tf5 = input.timeframe('60', 'Timeframe 5', group = GRP5)
+
+trendConfirmBars = input.int(3, 'Trend Confirmation Bars (per TF)', minval = 1, maxval = 50, group = GRP5, tooltip = 'تعداد کندل تثبیت بیرون از Dispersion در همان تایم‌فریم')
+
+tf1_weight = input.int(1, 'TF1 Weight', minval = 1, maxval = 10, inline = 'w1', group = GRP5)
+tf2_weight = input.int(2, 'TF2 Weight', minval = 1, maxval = 10, inline = 'w1', group = GRP5)
+tf3_weight = input.int(3, 'TF3 Weight', minval = 1, maxval = 10, inline = 'w1', group = GRP5)
+tf4_weight = input.int(4, 'TF4 Weight', minval = 1, maxval = 10, inline = 'w2', group = GRP5)
+tf5_weight = input.int(5, 'TF5 Weight', minval = 1, maxval = 10, inline = 'w2', group = GRP5)
+
+decisionThreshold = input.float(0.5, 'Decision Threshold (0-1)', minval = 0.01, maxval = 1.0, step = 0.05, inline = 'w3', group = GRP5)
+
+trendUpColor      = input.color(color.new(color.lime, 0), 'Final Bullish Color',      inline = 'w4', group = GRP5)
+trendDownColor    = input.color(color.new(color.red, 0),  'Final Bearish Color',      inline = 'w4', group = GRP5)
+trendNeutralColor = input.color(color.new(#ffea00, 0),    'Final Neutral/Range Color', inline = 'w4', group = GRP5)
+showTrendBg       = input.bool(true, 'Show Final Trend Background', inline = 'w5', group = GRP5)
+arrowSizeInput    = input.string('Normal', 'Trend Arrow Size', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge'], group = GRP5)
+
+arrowSize = arrowSizeInput == 'Tiny' ? size.tiny : arrowSizeInput == 'Small' ? size.small : arrowSizeInput == 'Large' ? size.large : arrowSizeInput == 'Huge' ? size.huge : size.normal
+
+//#endregion
+
+// ================================================================================================
+// بخش ۴: ورودی‌های بصری
+// ================================================================================================
+//#region ———————————————————— INPUTS (VISUALS)
+
+var GRP4 = "Visuals"
+showBands      = input.bool(true, 'Show BB Upper/Lower',      inline = 'v1', group = GRP4)
+showDispersion = input.bool(true, 'Show Dispersion Fill',     inline = 'v1', group = GRP4)
+showOBOS       = input.bool(true, 'Show OB/OS Lines (70/30)', inline = 'v2', group = GRP4)
+bbLineColor    = input.color(#00fff0, 'BB Line Color',         inline = 'v3', group = GRP4)
+dispLineColor  = input.color(color.white, 'Dispersion Line Color', inline = 'v3', group = GRP4)
+basisLineColor = input.color(color.black, 'Basis (EMA) Color', inline = 'v3', group = GRP4)
+dispFillColor  = input.color(color.new(color.white, 80), 'Dispersion Fill Color', inline = 'v4', group = GRP4)
+obosLineColor  = input.color(color.new(#d4d4d4, 0), 'OB/OS Line Color', inline = 'v4', group = GRP4)
+obosFillColor  = input.color(color.new(#d4d4d4, 95), 'OB/OS Fill Color', inline = 'v4', group = GRP4)
+
+//#endregion
+
+// ================================================================================================
+// بخش ۵: توابع روند
+// ================================================================================================
+//#region ———————————————————— TREND FUNCS
+
+string stdTicker = ticker.standard(syminfo.tickerid)
+
+// لایو: صعودی=1 / نزولی=-1 / رنج(Dispersion)=0
+f_trendLive() =>
+    r = ta.rsi(close, for_rsi)
+    b = ta.ema(r, for_ma)
+    d = for_mult * ta.stdev(r, for_ma)
+    dispUp = b + ((2.0 * d) * for_sigma)
+    dispDn = b - ((2.0 * d) * for_sigma)
+    bool inDisp = r <= dispUp and r >= dispDn
+    barsBull = ta.barssince(r < dispUp)
+    barsBear = ta.barssince(r > dispDn)
+    barsBull := na(barsBull) ? 9999 : barsBull
+    barsBear := na(barsBear) ? 9999 : barsBear
+    int result = 0
+    if inDisp
+        result := 0
+    else if barsBull >= trendConfirmBars
+        result := 1
+    else if barsBear >= trendConfirmBars
+        result := -1
+    result
+
+// همه ۵ امتیاز همزمان اینجا حساب می‌شوند — کانتکست همیشه tf1 (لنگر)
+// تا روی چارت 1m و 5m و رنج‌بار همان جمع‌بندی لایو بیاید
+f_mtfBundle() =>
+    int t1 = f_trendLive()
+    int t2 = int(request.security(stdTicker, tf2, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
+    int t3 = int(request.security(stdTicker, tf3, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
+    int t4 = int(request.security(stdTicker, tf4, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
+    int t5 = int(request.security(stdTicker, tf5, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
+
+    float bScore = (t1 == 1 ? tf1_weight : 0) + (t2 == 1 ? tf2_weight : 0) + (t3 == 1 ? tf3_weight : 0) + (t4 == 1 ? tf4_weight : 0) + (t5 == 1 ? tf5_weight : 0)
+    float sScore = (t1 == -1 ? tf1_weight : 0) + (t2 == -1 ? tf2_weight : 0) + (t3 == -1 ? tf3_weight : 0) + (t4 == -1 ? tf4_weight : 0) + (t5 == -1 ? tf5_weight : 0)
+    float need = decisionThreshold * (tf1_weight + tf2_weight + tf3_weight + tf4_weight + tf5_weight)
+
+    int ft = 0
+    if bScore >= need and bScore > sScore
+        ft := 1
+    else if sScore >= need and sScore > bScore
+        ft := -1
+    [ft, bScore, sScore, t1, t2, t3, t4, t5]
+
+//#endregion
+
+// ================================================================================================
+// بخش ۶: پنل RSI روی تایم‌فریم چارت (فقط نمایش — نه منبع فلش)
+// ================================================================================================
+//#region ———————————————————— CURRENT TF CALC
+
+current_rsi = ta.rsi(src, for_rsi)
+basis       = ta.ema(current_rsi, for_ma)
+dev         = for_mult * ta.stdev(current_rsi, for_ma)
+upper       = basis + dev
+lower       = basis - dev
+disp_up     = basis + ((upper - lower) * for_sigma)
+disp_down   = basis - ((upper - lower) * for_sigma)
+
+color_rsi = current_rsi >= disp_up ? color.lime : current_rsi <= disp_down ? color.red : #ffea00
+rsi_Green = ta.crossover(current_rsi, disp_up)
+rsi_Red   = ta.crossunder(current_rsi, disp_down)
+
+//#endregion
+
+// ================================================================================================
+// بخش ۷: جمع‌بندی لایو — همیشه از لنگر tf1 (یکسان روی همه چارت‌ها)
+// ================================================================================================
+//#region ———————————————————— MTF LIVE AGGREGATION
+
+[finalTrend, bullScore, bearScore, trend1, trend2, trend3, trend4, trend5] =
+     request.security(stdTicker, tf1, f_mtfBundle(), barmerge.gaps_off, barmerge.lookahead_off)
+
+color finalTrendColor = finalTrend == 1 ? trendUpColor : finalTrend == -1 ? trendDownColor : trendNeutralColor
+
+bool finalToBullish = finalTrend == 1  and finalTrend[1] != 1
+bool finalToBearish = finalTrend == -1 and finalTrend[1] != -1
+bool finalToNeutral = finalTrend == 0  and finalTrend[1] != 0
+
+//#endregion
+
+// ================================================================================================
+// بخش ۸: رسم پنل + فلش لایو (پاک کردن فلش قبلی و کشیدن جدید)
+// ================================================================================================
+//#region ———————————————————— PLOTS
+
+bgcolor(showTrendBg and enableTrendDetection ? color.new(finalTrendColor, 90) : na)
+
+h1 = plot(showOBOS ? 70 : na, 'OB 70 Hidden', color = obosLineColor, linewidth = 1)
+h2 = plot(showOBOS ? 30 : na, 'OS 30 Hidden', color = obosLineColor, linewidth = 1)
+fill(h1, h2, showOBOS ? obosFillColor : na)
+
+plot(basis, 'Basis (EMA)', color = basisLineColor, linewidth = 2)
+plot(showBands ? upper : na, 'BB Upper', color = bbLineColor, linewidth = 2)
+plot(showBands ? lower : na, 'BB Lower', color = bbLineColor, linewidth = 2)
+s1 = plot(showDispersion ? disp_up : na, 'Dispersion Upper', color = dispLineColor)
+s2 = plot(showDispersion ? disp_down : na, 'Dispersion Lower', color = dispLineColor)
+fill(s1, s2, showDispersion ? dispFillColor : na)
+
+color finalRsiColor = enableTrendDetection ? finalTrendColor : color_rsi
+plot(current_rsi, 'RSI', color = finalRsiColor, linewidth = 3)
+
+// فلش لایو: هر بار فلش قبلی پاک → فلش جدید از جمع‌بندی ۵TF
+var label arrowLabel = na
+
+f_tfStatus(int t) =>
+    t == 1 ? "صعودی" : t == -1 ? "نزولی" : "رنج(0)"
+
+if enableTrendDetection and barstate.islast
+    if not na(arrowLabel)
+        label.delete(arrowLabel)
+
+    string arrowText = finalTrend == 1 ? "▲" : finalTrend == -1 ? "▼" : "→"
+    color arrowColor = finalTrend == 1 ? color.lime : finalTrend == -1 ? color.red : color.white
+    string tip =
+         "جمع‌بندی لایو ۵ تایم‌فریم\n" +
+         "━━━━━━━━━━━━━━━━━━\n" +
+         tf1 + ": " + f_tfStatus(trend1) + "\n" +
+         tf2 + ": " + f_tfStatus(trend2) + "\n" +
+         tf3 + ": " + f_tfStatus(trend3) + "\n" +
+         tf4 + ": " + f_tfStatus(trend4) + "\n" +
+         tf5 + ": " + f_tfStatus(trend5) + "\n" +
+         "━━━━━━━━━━━━━━━━━━\n" +
+         "امتیاز صعودی: " + str.tostring(bullScore, "#") + "\n" +
+         "امتیاز نزولی: " + str.tostring(bearScore, "#") + "\n" +
+         "روند نهایی: " + (finalTrend == 1 ? "صعودی" : finalTrend == -1 ? "نزولی" : "رنج")
+
+    arrowLabel := label.new(bar_index, current_rsi, arrowText,
+         xloc = xloc.bar_index, yloc = yloc.price,
+         style = label.style_none, color = color(na),
+         textcolor = arrowColor, size = arrowSize, tooltip = tip)
+
+//#endregion
+
+// ================================================================================================
+// بخش ۹: هشدارها
+// ================================================================================================
+//#region ———————————————————— ALERTS
+
+alertcondition(rsi_Green, title = 'RSI cross Above Dispersion Area', message = 'The RSI line closing crossed above the Dispersion area.')
+alertcondition(rsi_Red,   title = 'RSI cross Under Dispersion Area', message = 'The RSI line closing crossed below the Dispersion area')
+
+alertcondition(ta.crossover(current_rsi, 70),  title = 'RSI Overbought (>70)',  message = 'RSI entered Overbought zone (>70)')
+alertcondition(ta.crossunder(current_rsi, 30), title = 'RSI Oversold (<30)',    message = 'RSI entered Oversold zone (<30)')
+
+alertcondition(enableTrendDetection and finalToBullish, title = '🟢 FINAL TREND = BULLISH', message = 'روند نهایی 5 تایم فریم صعودی شد')
+alertcondition(enableTrendDetection and finalToBearish, title = '🔴 FINAL TREND = BEARISH', message = 'روند نهایی 5 تایم فریم نزولی شد')
+alertcondition(enableTrendDetection and finalToNeutral, title = '🟡 FINAL TREND = NEUTRAL/RANGE', message = 'روند نهایی 5 تایم فریم رنج/خنثی شد')
+
+//#endregion

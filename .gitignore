@@ -1,0 +1,7 @@
+﻿*.algo
+.DS_Store
+Thumbs.db
+*.user
+bin/
+obj/
+.vs/
