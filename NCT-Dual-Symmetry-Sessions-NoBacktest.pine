@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 //@version=6
-indicator("NCT - Dual Symmetry + Sessions", shorttitle = "NCT+Sessions+POV+FVG", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
+indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+POV+FVG", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
 
 // ================================================================================================
 // بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها + زون‌های هم‌پوشان)
@@ -825,23 +825,6 @@ valTargetWeight               = input.float(100, 'Weight: POV VAL Target', minva
 // --- جدول امتیازات ---
 showScoreTable = input.bool(true, 'Show Score Table', group = GRP9, tooltip = 'جدول امتیازات و اطلاعات تارگت‌ها در گوشه بالا-راست نمودار')
 
-// ================================================================================================
-// آنالیز ترکیب تارگت‌ها (Hit-Rate Analytics)
-// ================================================================================================
-var GRP_ANA = "Target Combo Analytics"
-enableTargetAnalytics = input.bool(true, 'Enable Combo Analytics', group = GRP_ANA, tooltip = 'فقط خوشه‌هایی که دایره قرمز می‌سازند وارد بک‌تست می‌شوند؛ بقیه حذف')
-anaLookbackBars = input.int(5000, 'Analytics Lookback Bars', minval = 200, maxval = 5000, group = GRP_ANA)
-anaLookaheadBars = input.int(50, 'Hit Lookahead Bars', minval = 5, maxval = 500, group = GRP_ANA, tooltip = 'حداکثر کندل برای رسیدن قیمت به تارگت مرجع')
-anaStopAtrMult = input.float(1.0, 'Fail Stop ATR Mult', minval = 0.1, maxval = 5.0, step = 0.1, group = GRP_ANA, tooltip = 'اگر قبل از Hit، قیمت این مقدار ATR خلاف جهت برود → Fail')
-anaMinSamples = input.int(3, 'Min Samples to Rank', minval = 1, maxval = 100, group = GRP_ANA)
-anaTopN = input.int(5, 'Top N Combos', minval = 1, maxval = 10, group = GRP_ANA)
-anaMinClusterScore = input.float(100, 'Min Cluster Score to Event', minval = 0, group = GRP_ANA, tooltip = 'حداقل جمع وزن تارگت‌های هم‌خوشه برای ثبت رویداد')
-anaMinTypesInCluster = input.int(2, 'Min Distinct Types in Cluster', minval = 2, maxval = 8, group = GRP_ANA)
-anaClusterTolPct = input.float(0.5, 'Analytics Cluster Tolerance (%) [unused if Red-only]', minval = 0.01, maxval = 10.0, step = 0.05, group = GRP_ANA, tooltip = 'دیگر برای رویداد استفاده نمی‌شود. بک‌تست فقط روی خوشه دایره قرمز است (Red Tolerance در Close Target Detection).')
-anaEventCooldown = input.int(5, 'Event Cooldown Bars', minval = 1, maxval = 100, group = GRP_ANA)
-anaShowTable = input.bool(true, 'Show Analytics Table', group = GRP_ANA)
-anaShowLiveHint = input.bool(true, 'Show Live Setup Hint', group = GRP_ANA)
-
 method initColor(series NDS this) =>
     this.colors.push(Color.new(this.settings.c1))
     this.colors.push(Color.new(this.settings.c2))
@@ -885,7 +868,8 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
             index = node.indexNode
             numberNode  = node.numberNode
             textColor = this.colors.get(indexColor).labelColor
-            string baseText = node.isSymmetrySetup ? "**" + str.tostring(numberNode) + "**" : str.tostring(numberNode) + suffix
+            // Symmetry nodes (**) display as single-star (*)
+            string baseText = str.tostring(numberNode) + suffix
             string newText = baseText
             if i > 0
                 if nodesRef.get(i - 1).indexNode == node.indexNode
@@ -1348,10 +1332,10 @@ endPointInput   = input.int(0, 'End Point (Final)', group = GRP2, minval = 0 , m
 
 var GRP1 = "Strategy Config"
 swCalcLogarithm = input.bool(true, 'Calc Nodes with Logarithm' , group = GRP1, tooltip = 'فقط روی محاسبه‌ی خودِ نودها و سیمتری اثر دارد. تارگت‌ها همیشه بر حسب لگاریتم محاسبه می‌شوند.')
-nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'ستاره‌دار: فقط نودهای 1* و **1** با خطوط و تارگت‌ها. بدون ستاره: فقط نودهای معمولی 1 و 2.')
+nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'ستاره‌دار: نودهای 1* (شامل سیمتری که قبلاً ** بود) با خطوط و تارگت‌ها. بدون ستاره: فقط نودهای معمولی 1 و 2.')
 verticalGapInput = input.int(0, 'Vertical Gap: Symmetry vs No-Symmetry (lines)', minval = 0, maxval = 15, group = GRP1, tooltip = "تعداد خط خالی فاصله عمودی بین عدد ستاره‌دار (سیمتری) و عدد بدون ستاره")
 showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', group = GRP1)
-showDoubleStarNodesInput = input.bool(true, 'Show Double-Star Nodes ( ** )', group = GRP1)
+showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
 
 var GRP5 = "Node Targets — Master Switches"
 enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + Min + Correction)', group = GRP5)
@@ -1538,7 +1522,7 @@ if bar_index == last_bar_index
 sessionDisplayDays = input.int(2, 'Session Display Days', minval = 1, maxval = 10, group = 'Session Display', tooltip = 'تعداد روزهایی که سشن‌ها نمایش داده می‌شوند. مثلاً ۲ یعنی امروز و دیروز. فقط باکس Range، خط مرزی و Midline محدود می‌شوند.')
 
 //Session A
-show_sesa = input.bool(true, '', inline = 'sesa', group = 'Session A')
+show_sesa = input.bool(false, '', inline = 'sesa', group = 'Session A')
 sesa_txt = input.string('New York', '', inline = 'sesa', group = 'Session A')
 sesa_ses = input.session('1300-2200', '', inline = 'sesa', group = 'Session A')
 sesa_css = input.color(#ff5d00, '', inline = 'sesa', group = 'Session A')
@@ -1552,7 +1536,7 @@ sesa_midline = input.bool(true, 'Middle Line', inline = 'sesa_overlays', group =
 sesa_midline_length = input.int(10, 'Middle Line Extension (Bars)', minval=0, group = 'Session A')
 
 //Session B
-show_sesb = input.bool(true, '', inline = 'sesb', group = 'Session B')
+show_sesb = input.bool(false, '', inline = 'sesb', group = 'Session B')
 sesb_txt = input.string('London', '', inline = 'sesb', group = 'Session B')
 sesb_ses = input.session('0700-1530', '', inline = 'sesb', group = 'Session B')
 sesb_css = input.color(#2157f3, '', inline = 'sesb', group = 'Session B')
@@ -1849,16 +1833,26 @@ if show_sesd and sesd_avg
 
 //-----------------------------------------------------------------------------
 
-line_length_factor_1m = input.int(130, title="Line Length Factor for 1 Minute", minval=1)
-line_length_factor_5m = input.int(24, title="Line Length Factor for 5 Minutes", minval=1)
-line_length_factor_15m = input.int(7, title="Line Length Factor for 15 Minutes", minval=1)
-line_length_factor_other = input.int(10, title="Line Length Factor for Other Timeframes", minval=1)
+var GRP_DAYOC = "Day Open/Close"
+showDayOpenLine = input.bool(true, 'Show Day Open Line', inline = 'dayoc_show', group = GRP_DAYOC)
+showDayCloseLine = input.bool(true, 'Show Day Close Line', inline = 'dayoc_show', group = GRP_DAYOC)
+open_line_color = input.color(color.green, 'Open Line Color', inline = 'dayoc_col', group = GRP_DAYOC)
+close_line_color = input.color(color.red, 'Close Line Color', inline = 'dayoc_col', group = GRP_DAYOC)
+openLineWidth = input.int(2, 'Open Line Width', minval = 1, maxval = 5, inline = 'dayoc_w', group = GRP_DAYOC)
+closeLineWidth = input.int(2, 'Close Line Width', minval = 1, maxval = 5, inline = 'dayoc_w', group = GRP_DAYOC)
+openLineStyle = input.string('Solid', 'Open Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'dayoc_st', group = GRP_DAYOC)
+closeLineStyle = input.string('Dotted', 'Close Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'dayoc_st', group = GRP_DAYOC)
+openLineTransparency = input.int(0, 'Open Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
+closeLineTransparency = input.int(0, 'Close Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
+line_length_factor_1m = input.int(130, 'Line Length Factor (1m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_5m = input.int(24, 'Line Length Factor (5m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_15m = input.int(7, 'Line Length Factor (15m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_other = input.int(10, 'Line Length Factor (Other TF)', minval = 1, group = GRP_DAYOC)
+showDayOCBox = input.bool(true, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
+dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = GRP_DAYOC)
 
-open_line_color = input.color(color.green, title="Open Line Color")
-close_line_color = input.color(color.red, title="Close Line Color")
-
-showDayOCBox = input.bool(true, 'Show Day Open/Close Panel', group = 'Day Open/Close', tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
-dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = 'Day Open/Close')
+dayOcStyleFromString(string s) =>
+    s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
 line_length_factor = switch
     timeframe.isminutes and timeframe.period == "1" => line_length_factor_1m
@@ -1885,21 +1879,27 @@ if is_new_day
 // Reuse 2 var lines — avoid creating a new line on every bar
 var line dayOpenHistLine = na
 var line dayCloseHistLine = na
+openLnStyle = dayOcStyleFromString(openLineStyle)
+closeLnStyle = dayOcStyleFromString(closeLineStyle)
 if dayCountOpenClose <= 2
-    if not na(open_today_price)
+    if showDayOpenLine and not na(open_today_price)
         if na(dayOpenHistLine)
-            dayOpenHistLine := line.new(bar_index, open_today_price, bar_index - line_length, open_today_price, color=open_line_color, width=2, style=line.style_solid)
+            dayOpenHistLine := line.new(bar_index, open_today_price, bar_index - line_length, open_today_price, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = openLnStyle)
         else
             line.set_xy1(dayOpenHistLine, bar_index, open_today_price)
             line.set_xy2(dayOpenHistLine, bar_index - line_length, open_today_price)
-            line.set_color(dayOpenHistLine, open_line_color)
-    if not na(close_yesterday_price)
+            line.set_color(dayOpenHistLine, color.new(open_line_color, openLineTransparency))
+            line.set_width(dayOpenHistLine, openLineWidth)
+            line.set_style(dayOpenHistLine, openLnStyle)
+    if showDayCloseLine and not na(close_yesterday_price)
         if na(dayCloseHistLine)
-            dayCloseHistLine := line.new(bar_index, close_yesterday_price, bar_index - line_length, close_yesterday_price, color=close_line_color, width=2, style=line.style_dotted)
+            dayCloseHistLine := line.new(bar_index, close_yesterday_price, bar_index - line_length, close_yesterday_price, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = closeLnStyle)
         else
             line.set_xy1(dayCloseHistLine, bar_index, close_yesterday_price)
             line.set_xy2(dayCloseHistLine, bar_index - line_length, close_yesterday_price)
-            line.set_color(dayCloseHistLine, close_line_color)
+            line.set_color(dayCloseHistLine, color.new(close_line_color, closeLineTransparency))
+            line.set_width(dayCloseHistLine, closeLineWidth)
+            line.set_style(dayCloseHistLine, closeLnStyle)
 
 // ================================================================================================
 // بخش ج: ثبت سقف/کف/میدلاین هر سشن به‌عنوان تارگت + اپن/کلوز روزانه + پنل + زون‌ها
@@ -2275,606 +2275,7 @@ if enableFvg and barstate.islast
 
 //#endregion
 
-// ================================================================================================
-// بخش ANA: Hit-Rate Combo Analytics (NCT types + FVG)
-// ================================================================================================
-//#region ———————————————————— TARGET COMBO ANALYTICS
 
-var array<float> ana_litePx = array.new<float>()
-var array<string> ana_liteTy = array.new<string>()
-var array<bool> ana_liteUp = array.new<bool>()
-var array<float> ana_liteW = array.new<float>()
-
-var array<string> ana_pendSig = array.new<string>()
-var array<bool> ana_pendUp = array.new<bool>()
-var array<int> ana_pendEntry = array.new<int>()
-var array<float> ana_pendEntryPx = array.new<float>()
-var array<float> ana_pendStop = array.new<float>()
-var array<float> ana_pendTgt = array.new<float>()
-
-var array<string> ana_statKey = array.new<string>()
-var array<int> ana_statHits = array.new<int>()
-var array<int> ana_statFails = array.new<int>()
-var array<int> ana_statSumBars = array.new<int>()
-var array<int> ana_statTimeouts = array.new<int>()
-
-var int ana_lastEvBarUp = -999999
-var int ana_lastEvBarDn = -999999
-var string ana_lastEvSigUp = ""
-var string ana_lastEvSigDn = ""
-var string ana_liveHint = ""
-var string ana_liveSigUp = ""
-var string ana_liveSigDn = ""
-var int ana_dbgEvents = 0
-var int ana_dbgResolved = 0
-var int ana_dbgLite = 0
-
-var table anaTable = table.new(position.bottom_left, 4, 18, bgcolor = color.new(color.black, 5), border_color = color.new(color.gray, 40), border_width = 1, frame_color = color.new(color.gray, 40), frame_width = 1)
-var table anaHintTable = table.new(position.top_left, 1, 2, bgcolor = color.new(color.black, 5), border_color = color.new(color.aqua, 50), border_width = 1)
-
-anaResetLite() =>
-    ana_litePx.clear()
-    ana_liteTy.clear()
-    ana_liteUp.clear()
-    ana_liteW.clear()
-
-anaPushLite(float px, string ty, bool isUp, float w) =>
-    if not na(px) and w > 0 and ty != ""
-        ana_litePx.push(px)
-        ana_liteTy.push(ty)
-        ana_liteUp.push(isUp)
-        ana_liteW.push(w)
-
-anaSafeLog(float v) =>
-    v > 0 ? math.log(v) : 0.0
-
-anaCollectNode1(array<Node> nodes, bool isUp, int maxCount) =>
-    int countNodes = nodes.size()
-    if countNodes > 0 and maxCount > 0
-        array<int> quals = array.new<int>()
-        for i = 0 to countNodes - 1
-            if nodes.get(i).numberNode == 1
-                quals.push(i)
-        int qn = quals.size()
-        int skip = math.max(qn - maxCount, 0)
-        int seen = 0
-        if qn > 0
-            for qi = 0 to qn - 1
-                seen += 1
-                if seen > skip
-                    Node node = nodes.get(quals.get(qi))
-                    float moveSizeLog = math.abs(anaSafeLog(node.highNode) - anaSafeLog(node.lowPreNode))
-                    float correctionSizeLog = math.abs(anaSafeLog(node.highNode) - anaSafeLog(node.lowCorrection))
-                    if showTargetDoubleInput and targetWeightSingleDouble > 0
-                        float p = isUp ? math.exp(anaSafeLog(node.highNode) + moveSizeLog) : math.exp(anaSafeLog(node.highNode) - moveSizeLog)
-                        anaPushLite(p, "SD", isUp, targetWeightSingleDouble)
-                    if showTargetMinInput and targetWeightSingleMin > 0
-                        float p = isUp ? math.exp(anaSafeLog(node.lowCorrection) + moveSizeLog) : math.exp(anaSafeLog(node.lowCorrection) - moveSizeLog)
-                        anaPushLite(p, "SM", isUp, targetWeightSingleMin)
-                    if showTargetCorrectionInput and targetWeightSingleCorrection > 0
-                        float p = isUp ? math.exp(anaSafeLog(node.highNode) + correctionSizeLog) : math.exp(anaSafeLog(node.highNode) - correctionSizeLog)
-                        anaPushLite(p, "SC", isUp, targetWeightSingleCorrection)
-
-anaCollectPair12(array<Node> nodes, bool isUp, int maxCount) =>
-    int countNodes = nodes.size()
-    if countNodes > 1 and maxCount > 0
-        array<int> pairIdx = array.new<int>()
-        for i = 0 to countNodes - 2
-            if nodes.get(i).numberNode == 1 and nodes.get(i + 1).numberNode == 2
-                pairIdx.push(i)
-        int pn = pairIdx.size()
-        int skip = math.max(pn - maxCount, 0)
-        int seen = 0
-        if pn > 0
-            for pi = 0 to pn - 1
-                seen += 1
-                if seen > skip
-                    int i = pairIdx.get(pi)
-                    Node node1 = nodes.get(i)
-                    Node node2 = nodes.get(i + 1)
-                    float totalMoveLog = math.abs(anaSafeLog(node2.highNode) - anaSafeLog(node1.lowPreNode))
-                    if showPairMinInput and targetWeightPairMin > 0
-                        float p = isUp ? math.exp(anaSafeLog(node1.lowCorrection) + totalMoveLog) : math.exp(anaSafeLog(node1.lowCorrection) - totalMoveLog)
-                        anaPushLite(p, "PM", isUp, targetWeightPairMin)
-                    if showPairMaxInput and targetWeightPairMax > 0
-                        float p = isUp ? math.exp(anaSafeLog(node2.lowCorrection) + totalMoveLog) : math.exp(anaSafeLog(node2.lowCorrection) - totalMoveLog)
-                        anaPushLite(p, "PX", isUp, targetWeightPairMax)
-                    if showPairDoubleInput and targetWeightPairDouble > 0
-                        float p = isUp ? math.exp(anaSafeLog(node2.highNode) + totalMoveLog) : math.exp(anaSafeLog(node2.highNode) - totalMoveLog)
-                        anaPushLite(p, "PD", isUp, targetWeightPairDouble)
-                    if showPairCorrectionInput and targetWeightPairCorrection > 0
-                        float c2 = math.abs(anaSafeLog(node2.highNode) - anaSafeLog(node2.lowCorrection))
-                        float p = isUp ? math.exp(anaSafeLog(node2.highNode) + c2) : math.exp(anaSafeLog(node2.highNode) - c2)
-                        anaPushLite(p, "PC", isUp, targetWeightPairCorrection)
-
-anaCollectFvg(bool isUp) =>
-    if enableFvg and fvgTargetWeight > 0 and fvg_max_arr.size() > 0
-        for i = 0 to fvg_max_arr.size() - 1
-            if fvg_bull_arr.get(i) == isUp
-                float mid = (fvg_max_arr.get(i) + fvg_min_arr.get(i)) * 0.5
-                anaPushLite(mid, "FG", isUp, fvgTargetWeight)
-
-anaTypeOrder(string t) =>
-    switch t
-        "SM" => 0
-        "SD" => 1
-        "SC" => 2
-        "PM" => 3
-        "PX" => 4
-        "PD" => 5
-        "PC" => 6
-        "FG" => 7
-        => 99
-
-anaBuildSigFromFlags(bool hasSM, bool hasSD, bool hasSC, bool hasPM, bool hasPX, bool hasPD, bool hasPC, bool hasFG) =>
-    string sig = ""
-    if hasSM
-        sig := sig == "" ? "SM" : sig + "+SM"
-    if hasSD
-        sig := sig == "" ? "SD" : sig + "+SD"
-    if hasSC
-        sig := sig == "" ? "SC" : sig + "+SC"
-    if hasPM
-        sig := sig == "" ? "PM" : sig + "+PM"
-    if hasPX
-        sig := sig == "" ? "PX" : sig + "+PX"
-    if hasPD
-        sig := sig == "" ? "PD" : sig + "+PD"
-    if hasPC
-        sig := sig == "" ? "PC" : sig + "+PC"
-    if hasFG
-        sig := sig == "" ? "FG" : sig + "+FG"
-    sig
-
-anaNear(float a, float b, float tolPct) =>
-    float refP = math.max(math.abs(a), 1e-8)
-    math.abs(a - b) / refP * 100.0 <= tolPct
-
-// فقط خوشه‌های دایره قرمز (همان معیار Close Target Detection) → برای بک‌تست
-// Returns [sig, score, refTarget]
-anaBestCluster(bool isUp) =>
-    string bestSig = ""
-    float bestScore = -1.0
-    float bestTgt = na
-    float redTol = redDensityTolerancePct
-    int minCnt = redDensityMinCount
-    int nAll = ana_litePx.size()
-
-    // جمع‌آوری ایندکس‌های هم‌جهت (بدون FG برای هم‌خوانی با دایره قرمز نودی؛ FG فقط اگر داخل باند قرمز باشد به امضا اضافه می‌شود)
-    array<int> idxs = array.new<int>()
-    if nAll > 0
-        for i = 0 to nAll - 1
-            if ana_liteUp.get(i) == isUp and ana_liteTy.get(i) != "FG"
-                idxs.push(i)
-
-    int n = idxs.size()
-    if n >= minCnt
-        // مرتب‌سازی صعودی بر اساس قیمت
-        for a = 1 to n - 1
-            int iKey = idxs.get(a)
-            float pKey = ana_litePx.get(iKey)
-            int b = a - 1
-            while b >= 0 and ana_litePx.get(idxs.get(b)) > pKey
-                idxs.set(b + 1, idxs.get(b))
-                b -= 1
-            idxs.set(b + 1, iKey)
-
-        array<bool> used = array.new<bool>(n, false)
-        for i = 0 to n - 1
-            if used.get(i)
-                continue
-            float runMin = ana_litePx.get(idxs.get(i))
-            float runMax = runMin
-            array<int> cluster = array.new<int>()
-            cluster.push(idxs.get(i))
-            if i < n - 1
-                for j = i + 1 to n - 1
-                    if used.get(j)
-                        continue
-                    float priceJ = ana_litePx.get(idxs.get(j))
-                    float refP = math.max(math.abs(runMin), 1e-8)
-                    float widthProbe = (math.max(runMax, priceJ) - math.min(runMin, priceJ)) / refP * 100.0
-                    // فقط داخل باند قرمز رشد کن (سخت‌گیرانه)
-                    if widthProbe > redTol
-                        break
-                    cluster.push(idxs.get(j))
-                    runMin := math.min(runMin, priceJ)
-                    runMax := math.max(runMax, priceJ)
-
-            int cSize = cluster.size()
-            if cSize < minCnt
-                used.set(i, true)
-                continue
-
-            for k = 0 to cSize - 1
-                // mark used by scanning idxs positions
-                int idk = cluster.get(k)
-                for u = 0 to n - 1
-                    if idxs.get(u) == idk
-                        used.set(u, true)
-
-            float refW = math.max(math.abs(runMin), 1e-8)
-            float widthPct = (runMax - runMin) / refW * 100.0
-            // شرط دایره قرمز
-            if widthPct <= redTol and cSize >= minCnt
-                bool hasSM = false
-                bool hasSD = false
-                bool hasSC = false
-                bool hasPM = false
-                bool hasPX = false
-                bool hasPD = false
-                bool hasPC = false
-                bool hasFG = false
-                float score = 0.0
-                float bestW = -1.0
-                float refT = na
-                int typeCount = 0
-                for k = 0 to cSize - 1
-                    int id = cluster.get(k)
-                    string ty = ana_liteTy.get(id)
-                    float w = ana_liteW.get(id)
-                    float px = ana_litePx.get(id)
-                    bool neu = false
-                    if ty == "SM" and not hasSM
-                        hasSM := true
-                        neu := true
-                    else if ty == "SD" and not hasSD
-                        hasSD := true
-                        neu := true
-                    else if ty == "SC" and not hasSC
-                        hasSC := true
-                        neu := true
-                    else if ty == "PM" and not hasPM
-                        hasPM := true
-                        neu := true
-                    else if ty == "PX" and not hasPX
-                        hasPX := true
-                        neu := true
-                    else if ty == "PD" and not hasPD
-                        hasPD := true
-                        neu := true
-                    else if ty == "PC" and not hasPC
-                        hasPC := true
-                        neu := true
-                    if neu
-                        typeCount += 1
-                        score += w
-                        bool sideOk = isUp ? px > close : px < close
-                        if sideOk and w > bestW
-                            bestW := w
-                            refT := px
-
-                // FG هم‌جهت اگر دقیقاً داخل باند قرمز باشد به امضا اضافه شود
-                if nAll > 0
-                    for fi = 0 to nAll - 1
-                        if ana_liteUp.get(fi) == isUp and ana_liteTy.get(fi) == "FG"
-                            float fpx = ana_litePx.get(fi)
-                            if fpx >= runMin and fpx <= runMax and not hasFG
-                                hasFG := true
-                                score += ana_liteW.get(fi)
-                                typeCount += 1
-                                bool sideOkFg = isUp ? fpx > close : fpx < close
-                                if sideOkFg and ana_liteW.get(fi) > bestW
-                                    bestW := ana_liteW.get(fi)
-                                    refT := fpx
-
-                if na(refT)
-                    float mid = (runMin + runMax) * 0.5
-                    bool midOk = isUp ? mid > close : mid < close
-                    if midOk
-                        refT := mid
-                    else
-                        // نزدیک‌ترین عضو خوشه در سمت معامله
-                        float nearestDist = 1e99
-                        for k = 0 to cSize - 1
-                            float px = ana_litePx.get(cluster.get(k))
-                            bool sideOk = isUp ? px > close : px < close
-                            if sideOk
-                                float d = math.abs(px - close)
-                                if d < nearestDist
-                                    nearestDist := d
-                                    refT := px
-
-                if typeCount >= anaMinTypesInCluster and score >= anaMinClusterScore and not na(refT)
-                    // تنگ‌ترین / قوی‌ترین خوشه قرمز
-                    float rankScore = score + (redTol - widthPct) * 1000.0
-                    if rankScore > bestScore
-                        bestScore := rankScore
-                        bestSig := anaBuildSigFromFlags(hasSM, hasSD, hasSC, hasPM, hasPX, hasPD, hasPC, hasFG)
-                        bestTgt := refT
-
-    [bestSig, bestScore, bestTgt]
-
-anaFindStat(string key) =>
-    int idx = -1
-    int ns = ana_statKey.size()
-    if ns > 0
-        for i = 0 to ns - 1
-            if ana_statKey.get(i) == key
-                idx := i
-                break
-    idx
-
-anaEnsureStat(string key) =>
-    int idx = anaFindStat(key)
-    if idx < 0
-        ana_statKey.push(key)
-        ana_statHits.push(0)
-        ana_statFails.push(0)
-        ana_statSumBars.push(0)
-        ana_statTimeouts.push(0)
-        idx := ana_statKey.size() - 1
-    idx
-
-anaRecordResult(string sig, bool isUp, bool isHit, bool isTimeout, int barsToHit) =>
-    string key = (isUp ? "U:" : "D:") + sig
-    int idx = anaEnsureStat(key)
-    if isTimeout
-        ana_statTimeouts.set(idx, ana_statTimeouts.get(idx) + 1)
-    else if isHit
-        ana_statHits.set(idx, ana_statHits.get(idx) + 1)
-        ana_statSumBars.set(idx, ana_statSumBars.get(idx) + barsToHit)
-    else
-        ana_statFails.set(idx, ana_statFails.get(idx) + 1)
-
-anaOpenEvent(string sig, bool isUp, float tgt) =>
-    bool opened = false
-    int usedEntry = bar_index
-    if sig != "" and not na(tgt) and not na(atrValue) and atrValue > 0 and ana_pendSig.size() < 80
-        float entryPx = close
-        float stopPx = isUp ? entryPx - anaStopAtrMult * atrValue : entryPx + anaStopAtrMult * atrValue
-        bool tgtOk = isUp ? tgt > entryPx : tgt < entryPx
-        if tgtOk
-            ana_pendSig.push(sig)
-            ana_pendUp.push(isUp)
-            ana_pendEntry.push(bar_index)
-            ana_pendEntryPx.push(entryPx)
-            ana_pendStop.push(stopPx)
-            ana_pendTgt.push(tgt)
-            opened := true
-    [opened, usedEntry]
-
-anaResolvePending() =>
-    if ana_pendSig.size() > 0
-        for i = ana_pendSig.size() - 1 to 0
-            int entry = ana_pendEntry.get(i)
-            if bar_index > entry
-                bool isUp = ana_pendUp.get(i)
-                float tgt = ana_pendTgt.get(i)
-                float stop = ana_pendStop.get(i)
-                string sig = ana_pendSig.get(i)
-                int age = bar_index - entry
-                bool hit = isUp ? high >= tgt : low <= tgt
-                bool fail = isUp ? low <= stop : high >= stop
-                if hit
-                    anaRecordResult(sig, isUp, true, false, age)
-                    ana_pendSig.remove(i)
-                    ana_pendUp.remove(i)
-                    ana_pendEntry.remove(i)
-                    ana_pendEntryPx.remove(i)
-                    ana_pendStop.remove(i)
-                    ana_pendTgt.remove(i)
-                else if fail
-                    anaRecordResult(sig, isUp, false, false, age)
-                    ana_pendSig.remove(i)
-                    ana_pendUp.remove(i)
-                    ana_pendEntry.remove(i)
-                    ana_pendEntryPx.remove(i)
-                    ana_pendStop.remove(i)
-                    ana_pendTgt.remove(i)
-                else if age >= anaLookaheadBars
-                    anaRecordResult(sig, isUp, false, true, age)
-                    ana_pendSig.remove(i)
-                    ana_pendUp.remove(i)
-                    ana_pendEntry.remove(i)
-                    ana_pendEntryPx.remove(i)
-                    ana_pendStop.remove(i)
-                    ana_pendTgt.remove(i)
-
-anaHitRate(int idx) =>
-    int h = ana_statHits.get(idx)
-    int f = ana_statFails.get(idx)
-    int den = h + f
-    den > 0 ? 100.0 * h / den : 0.0
-
-anaSampleN(int idx) =>
-    ana_statHits.get(idx) + ana_statFails.get(idx)
-
-anaTrials(int idx) =>
-    ana_statHits.get(idx) + ana_statFails.get(idx) + ana_statTimeouts.get(idx)
-
-anaAvgBars(int idx) =>
-    int h = ana_statHits.get(idx)
-    h > 0 ? ana_statSumBars.get(idx) * 1.0 / h : 0.0
-
-anaSortRank(array<int> idxs) =>
-    int m = idxs.size()
-    if m > 1
-        for a = 0 to m - 2
-            int best = a
-            for b = a + 1 to m - 1
-                int ib = idxs.get(b)
-                int ibest = idxs.get(best)
-                float rb = anaHitRate(ib)
-                float rbest = anaHitRate(ibest)
-                int nb = anaSampleN(ib)
-                int nbest = anaSampleN(ibest)
-                if rb > rbest or (rb == rbest and nb > nbest)
-                    best := b
-            if best != a
-                int tmp = idxs.get(a)
-                idxs.set(a, idxs.get(best))
-                idxs.set(best, tmp)
-
-// ——— Main analytics loop (after nodes + FVG exist) ———
-if enableTargetAnalytics
-    int anaWindowStart = last_bar_index - anaLookbackBars
-    bool inAnaWindow = bar_index >= anaWindowStart
-
-    if inAnaWindow
-        anaResetLite()
-        NDS anaNode = nodeDisplayMode == 'Starred' ? cNodeSym : cNodeNoSym
-        if enableSingleNode1Targets
-            if showTargetNode1Up
-                anaCollectNode1(anaNode.nodesUp, true, targetNode1MaxCount)
-            if showTargetNode1Down
-                anaCollectNode1(anaNode.nodesDown, false, targetNode1MaxCount)
-        if enablePairNode12Targets
-            if showTargetNode1Up
-                anaCollectPair12(anaNode.nodesUp, true, pairTargetMaxCount)
-            if showTargetNode1Down
-                anaCollectPair12(anaNode.nodesDown, false, pairTargetMaxCount)
-        anaCollectFvg(true)
-        anaCollectFvg(false)
-        ana_dbgLite := ana_litePx.size()
-
-        [sigUp, scUp, tgtUp] = anaBestCluster(true)
-        [sigDn, scDn, tgtDn] = anaBestCluster(false)
-        ana_liveSigUp := sigUp
-        ana_liveSigDn := sigDn
-
-        if sigUp != ""
-            bool coolUp = bar_index - ana_lastEvBarUp >= anaEventCooldown or sigUp != ana_lastEvSigUp
-            if coolUp
-                [openedUp, entUp] = anaOpenEvent(sigUp, true, tgtUp)
-                if openedUp
-                    ana_lastEvBarUp := entUp
-                    ana_lastEvSigUp := sigUp
-                    ana_dbgEvents += 1
-        if sigDn != ""
-            bool coolDn = bar_index - ana_lastEvBarDn >= anaEventCooldown or sigDn != ana_lastEvSigDn
-            if coolDn
-                [openedDn, entDn] = anaOpenEvent(sigDn, false, tgtDn)
-                if openedDn
-                    ana_lastEvBarDn := entDn
-                    ana_lastEvSigDn := sigDn
-                    ana_dbgEvents += 1
-
-        int pendBefore = ana_pendSig.size()
-        anaResolvePending()
-        int closedNow = pendBefore - ana_pendSig.size()
-        if closedNow > 0
-            ana_dbgResolved += closedNow
-
-    if barstate.islast
-        ana_liveHint := ""
-        array<int> upIdx = array.new<int>()
-        array<int> dnIdx = array.new<int>()
-        int ns = ana_statKey.size()
-        if ns > 0
-            for i = 0 to ns - 1
-                // Show if enough resolved (hit/fail) OR enough total trials incl. timeout
-                if anaSampleN(i) >= anaMinSamples or anaTrials(i) >= anaMinSamples
-                    string k = ana_statKey.get(i)
-                    if str.startswith(k, "U:")
-                        upIdx.push(i)
-                    else if str.startswith(k, "D:")
-                        dnIdx.push(i)
-
-        anaSortRank(upIdx)
-        anaSortRank(dnIdx)
-
-        if anaShowLiveHint
-            string hint = ""
-            if ana_liveSigUp != "" and upIdx.size() > 0
-                for t = 0 to math.min(anaTopN, upIdx.size()) - 1
-                    int ii = upIdx.get(t)
-                    if ana_statKey.get(ii) == "U:" + ana_liveSigUp
-                        hint := "LIVE ▲ " + ana_liveSigUp + "  hit " + str.tostring(anaHitRate(ii), "#.#") + "% (n=" + str.tostring(anaSampleN(ii)) + ")"
-                        break
-            if hint == "" and ana_liveSigDn != "" and dnIdx.size() > 0
-                for t = 0 to math.min(anaTopN, dnIdx.size()) - 1
-                    int ii = dnIdx.get(t)
-                    if ana_statKey.get(ii) == "D:" + ana_liveSigDn
-                        hint := "LIVE ▼ " + ana_liveSigDn + "  hit " + str.tostring(anaHitRate(ii), "#.#") + "% (n=" + str.tostring(anaSampleN(ii)) + ")"
-                        break
-            if hint == "" and ana_liveSigUp != ""
-                hint := "NOW ▲ " + ana_liveSigUp + " (building stats…)"
-            else if hint == "" and ana_liveSigDn != ""
-                hint := "NOW ▼ " + ana_liveSigDn + " (building stats…)"
-            else if hint == ""
-                hint := "Lite " + str.tostring(ana_dbgLite) + " | Ev " + str.tostring(ana_dbgEvents) + " | Done " + str.tostring(ana_dbgResolved)
-            ana_liveHint := hint
-            table.cell(anaHintTable, 0, 0, "Combo Hint", text_color = color.aqua, text_size = size.small)
-            table.cell(anaHintTable, 0, 1, hint, text_color = color.white, text_size = size.small)
-        else
-            table.clear(anaHintTable, 0, 0, 0, 1)
-
-        if anaShowTable
-            table.cell(anaTable, 0, 0, "Combo Analytics", text_color = color.white, text_size = size.small)
-            table.cell(anaTable, 1, 0, "Hit%", text_color = color.gray, text_size = size.small)
-            table.cell(anaTable, 2, 0, "n", text_color = color.gray, text_size = size.small)
-            table.cell(anaTable, 3, 0, "avgBars", text_color = color.gray, text_size = size.small)
-
-            table.cell(anaTable, 0, 1, "status", text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 1, 1, "L" + str.tostring(ana_dbgLite), text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 2, 1, "E" + str.tostring(ana_dbgEvents), text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 3, 1, "R" + str.tostring(ana_dbgResolved), text_color = color.aqua, text_size = size.tiny)
-
-            table.cell(anaTable, 0, 2, "▲ TOP UP", text_color = color.lime, text_size = size.small)
-            table.cell(anaTable, 1, 2, "", text_color = color.lime, text_size = size.small)
-            table.cell(anaTable, 2, 2, "", text_color = color.lime, text_size = size.small)
-            table.cell(anaTable, 3, 2, "", text_color = color.lime, text_size = size.small)
-
-            int row = 3
-            int upShow = math.min(anaTopN, upIdx.size())
-            if upShow > 0
-                for t = 0 to upShow - 1
-                    int ii = upIdx.get(t)
-                    string name = str.replace_all(ana_statKey.get(ii), "U:", "")
-                    table.cell(anaTable, 0, row, name, text_color = color.lime, text_size = size.tiny)
-                    table.cell(anaTable, 1, row, str.tostring(anaHitRate(ii), "#.#"), text_color = color.white, text_size = size.tiny)
-                    table.cell(anaTable, 2, row, str.tostring(anaSampleN(ii)) + "/" + str.tostring(anaTrials(ii)), text_color = color.white, text_size = size.tiny)
-                    table.cell(anaTable, 3, row, str.tostring(anaAvgBars(ii), "#.#"), text_color = color.white, text_size = size.tiny)
-                    row += 1
-            else
-                table.cell(anaTable, 0, row, ana_dbgLite < 2 ? "(few targets now)" : "(waiting resolve…)", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 1, row, "—", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 2, row, "—", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 3, row, "—", text_color = color.gray, text_size = size.tiny)
-                row += 1
-
-            table.cell(anaTable, 0, row, "▼ TOP DOWN", text_color = color.red, text_size = size.small)
-            table.cell(anaTable, 1, row, "", text_color = color.red, text_size = size.small)
-            table.cell(anaTable, 2, row, "", text_color = color.red, text_size = size.small)
-            table.cell(anaTable, 3, row, "", text_color = color.red, text_size = size.small)
-            row += 1
-
-            int dnShow = math.min(anaTopN, dnIdx.size())
-            if dnShow > 0
-                for t = 0 to dnShow - 1
-                    int ii = dnIdx.get(t)
-                    string name = str.replace_all(ana_statKey.get(ii), "D:", "")
-                    table.cell(anaTable, 0, row, name, text_color = color.red, text_size = size.tiny)
-                    table.cell(anaTable, 1, row, str.tostring(anaHitRate(ii), "#.#"), text_color = color.white, text_size = size.tiny)
-                    table.cell(anaTable, 2, row, str.tostring(anaSampleN(ii)) + "/" + str.tostring(anaTrials(ii)), text_color = color.white, text_size = size.tiny)
-                    table.cell(anaTable, 3, row, str.tostring(anaAvgBars(ii), "#.#"), text_color = color.white, text_size = size.tiny)
-                    row += 1
-            else
-                table.cell(anaTable, 0, row, ana_dbgLite < 2 ? "(few targets now)" : "(waiting resolve…)", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 1, row, "—", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 2, row, "—", text_color = color.gray, text_size = size.tiny)
-                table.cell(anaTable, 3, row, "—", text_color = color.gray, text_size = size.tiny)
-                row += 1
-
-            string tip = "RED● only | Live ▲ " + (ana_liveSigUp == "" ? "—" : ana_liveSigUp) + " ▼ " + (ana_liveSigDn == "" ? "—" : ana_liveSigDn)
-            if upIdx.size() > 0
-                int bi = upIdx.get(0)
-                tip := "Best RED▲ " + str.replace_all(ana_statKey.get(bi), "U:", "") + " " + str.tostring(anaHitRate(bi), "#.#") + "% (n=" + str.tostring(anaSampleN(bi)) + ")"
-            else if dnIdx.size() > 0
-                int bi = dnIdx.get(0)
-                tip := "Best RED▼ " + str.replace_all(ana_statKey.get(bi), "D:", "") + " " + str.tostring(anaHitRate(bi), "#.#") + "% (n=" + str.tostring(anaSampleN(bi)) + ")"
-            table.cell(anaTable, 0, row, tip, text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 1, row, "", text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 2, row, "", text_color = color.aqua, text_size = size.tiny)
-            table.cell(anaTable, 3, row, "", text_color = color.aqua, text_size = size.tiny)
-        else
-            table.clear(anaTable, 0, 0, 3, 17)
-else if barstate.islast
-    table.clear(anaTable, 0, 0, 3, 15)
-    table.clear(anaHintTable, 0, 0, 0, 1)
-
-//#endregion
 
 
 registerSessionTargetEx(float price, color col, float weight, bool isUp, string labelText, bool isToday) =>
@@ -2935,19 +2336,19 @@ if bar_index == last_bar_index
                 midD = (curmax_sesd + curmin_sesd) / 2
                 registerSessionTargetEx(midD, sesd_css, sessionTargetWeightMid, true, sesd_txt + " Mid", sesdIsTodayTarget)
 
-    if not na(open_today_price) and dayOCWeight > 0
+    if showDayOpenLine and not na(open_today_price) and dayOCWeight > 0
         f_open = chart.point.from_index(bar_index, open_today_price)
         s_open = chart.point.from_index(bar_index + targetLabelGapBars, open_today_price)
-        trackLine(line.new(f_open, s_open, color = color.new(open_line_color, 0), width = 2, style = line.style_solid))
+        trackLine(line.new(f_open, s_open, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = dayOcStyleFromString(openLineStyle)))
         midX = (bar_index + bar_index + targetLabelGapBars) / 2
         trackLabel(label.new(x = midX, y = open_today_price, text = "H Day Open", style = label.style_label_center, color = color.new(color.black, 100), textcolor = open_line_color, size = textSizeFromString(targetLabelSize)))
         string openKey = "DayOpen_" + str.tostring(open_today_price)
         registerTarget(open_today_price, bar_index + targetLabelGapBars, open_line_color, dayOCWeight, true, 1.0, bar_index, openKey)
 
-    if not na(close_yesterday_price) and dayOCWeight > 0
+    if showDayCloseLine and not na(close_yesterday_price) and dayOCWeight > 0
         f_close = chart.point.from_index(bar_index, close_yesterday_price)
         s_close = chart.point.from_index(bar_index + targetLabelGapBars, close_yesterday_price)
-        trackLine(line.new(f_close, s_close, color = color.new(close_line_color, 0), width = 2, style = line.style_dotted))
+        trackLine(line.new(f_close, s_close, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = dayOcStyleFromString(closeLineStyle)))
         midX = (bar_index + bar_index + targetLabelGapBars) / 2
         trackLabel(label.new(x = midX, y = close_yesterday_price, text = "L Day Close", style = label.style_label_center, color = color.new(color.black, 100), textcolor = close_line_color, size = textSizeFromString(targetLabelSize)))
         string closeKey = "DayClose_" + str.tostring(close_yesterday_price)
