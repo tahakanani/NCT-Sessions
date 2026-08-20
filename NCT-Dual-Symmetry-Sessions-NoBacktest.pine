@@ -1,9 +1,9 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 //@version=6
-indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+POV+FVG", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
+indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+FVG", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
 
 // ================================================================================================
-// بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها + زون‌های هم‌پوشان)
+// بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها)
 // ================================================================================================
 
 // ================================================================================================
@@ -429,7 +429,6 @@ method CalcNode_DownTrend(series NDS this) =>
 var g_labels = array.new<label>()
 var g_lines  = array.new<line>()
 var g_boxes  = array.new<box>()
-var g_circles = array.new<label>()
 
 // Leave headroom under TradingView hard caps (500)
 MAX_DRAW_LINES   = 480
@@ -438,11 +437,49 @@ MAX_DRAW_BOXES   = 480
 MAX_HIT_LOOKBACK = 2000
 MAX_ROUND_LEVELS = 40
 
+// Hit-check cache: build once per redraw, then O(1) per target
+var array<float> g_hitSufMaxHigh = array.new<float>()
+var array<float> g_hitSufMinLow = array.new<float>()
+var array<int> g_hitWin = array.from(0, -1)  // [start, end]
+
+prepareHitWindow(int hitGraceBars) =>
+    g_hitSufMaxHigh.clear()
+    g_hitSufMinLow.clear()
+    g_hitWin.set(0, 0)
+    g_hitWin.set(1, -1)
+    int lastCheckBar = bar_index - hitGraceBars - 1
+    if lastCheckBar >= 0
+        int fromBar = math.max(0, lastCheckBar - MAX_HIT_LOOKBACK + 1)
+        int n = lastCheckBar - fromBar + 1
+        if n > 0
+            g_hitWin.set(0, fromBar)
+            g_hitWin.set(1, lastCheckBar)
+            array<float> highs = array.new<float>(n)
+            array<float> lows = array.new<float>(n)
+            for i = 0 to n - 1
+                int off = bar_index - (fromBar + i)
+                highs.set(i, high[off])
+                lows.set(i, low[off])
+            float runMax = na
+            float runMin = na
+            array<float> sufMax = array.new<float>(n)
+            array<float> sufMin = array.new<float>(n)
+            for i = n - 1 to 0
+                float h = highs.get(i)
+                float l = lows.get(i)
+                runMax := na(runMax) ? h : math.max(runMax, h)
+                runMin := na(runMin) ? l : math.min(runMin, l)
+                sufMax.set(i, runMax)
+                sufMin.set(i, runMin)
+            for i = 0 to n - 1
+                g_hitSufMaxHigh.push(sufMax.get(i))
+                g_hitSufMinLow.push(sufMin.get(i))
+
 canDrawLine() =>
     g_lines.size() < MAX_DRAW_LINES
 
 canDrawLabel() =>
-    g_labels.size() + g_circles.size() < MAX_DRAW_LABELS
+    g_labels.size() < MAX_DRAW_LABELS
 
 canDrawBox() =>
     g_boxes.size() < MAX_DRAW_BOXES
@@ -465,11 +502,6 @@ trackBox(box b) =>
     else
         box.delete(b)
 
-trackCircle(label circ) =>
-    if canDrawLabel()
-        g_circles.push(circ)
-    else
-        label.delete(circ)
 
 clearDrawings() =>
     while g_labels.size() > 0
@@ -478,101 +510,23 @@ clearDrawings() =>
         line.delete(g_lines.pop())
     while g_boxes.size() > 0
         box.delete(g_boxes.pop())
-    while g_circles.size() > 0
-        label.delete(g_circles.pop())
 
-// Hit+grace check with capped lookback + early break (safe inside target loops; avoid ta.* in loops)
+// Fast hit check using prebuilt suffix max/min (same result as old per-target loop)
 shouldDeleteHitTarget(float price, int startIdx, bool isUp, bool deleteHit, int hitGraceBars) =>
     bool result = false
-    if deleteHit and not na(price) and startIdx <= bar_index
-        int lastCheckBar = bar_index - hitGraceBars - 1
-        if lastCheckBar >= startIdx
-            int fromBar = math.max(startIdx, lastCheckBar - MAX_HIT_LOOKBACK + 1)
-            for barIdx = fromBar to lastCheckBar
-                bool touched = isUp ? high[bar_index - barIdx] >= price : low[bar_index - barIdx] <= price
-                if touched
-                    result := true
-                    break
+    int winStart = g_hitWin.get(0)
+    int winEnd = g_hitWin.get(1)
+    if deleteHit and not na(price) and startIdx <= bar_index and winEnd >= winStart and g_hitSufMaxHigh.size() > 0
+        if winEnd >= startIdx
+            int fromBar = math.max(startIdx, winStart)
+            int idx = fromBar - winStart
+            if idx >= 0 and idx < g_hitSufMaxHigh.size()
+                result := isUp ? g_hitSufMaxHigh.get(idx) >= price : g_hitSufMinLow.get(idx) <= price
     result
-
-// === ورودی: دایره‌های تراکم تارگت (قرمز = خیلی نزدیک / زرد = کمی دورتر) ===
-var GRP_CLOSE = "Close Target Detection"
-showCloseTargetCircles = input.bool(true, 'Show Density Circles', group = GRP_CLOSE, tooltip = 'نمایش دایره روی مرکز خوشه‌های تراکم تارگت')
-
-showRedDensityCircle = input.bool(true, 'Show Red Circle (Very Close)', inline = 'dens1', group = GRP_CLOSE)
-showYellowDensityCircle = input.bool(true, 'Show Yellow Circle (Near)', inline = 'dens1', group = GRP_CLOSE)
-
-redDensityTolerancePct = input.float(0.01, 'Red Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_CLOSE, tooltip = 'تارگت‌های نودِ نمایش‌داده‌شده که عرض خوشه‌شان ≤ این % باشد → دایره قرمز')
-yellowDensityTolerancePct = input.float(0.05, 'Yellow Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_CLOSE, tooltip = 'تارگت‌های نودِ نمایش‌داده‌شده که از قرمز دورترند ولی عرض ≤ این % باشد → دایره زرد')
-
-redDensityMinCount = input.int(2, 'Red Min Targets', minval = 2, maxval = 20, inline = 'dens2', group = GRP_CLOSE)
-yellowDensityMinCount = input.int(2, 'Yellow Min Targets', minval = 2, maxval = 20, inline = 'dens2', group = GRP_CLOSE)
-
-redDensityColor = input.color(color.red, 'Red Circle Color', inline = 'dens3', group = GRP_CLOSE)
-yellowDensityColor = input.color(color.yellow, 'Yellow Circle Color', inline = 'dens3', group = GRP_CLOSE)
-
-redDensitySize = input.string('Huge', 'Red Circle Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], inline = 'dens4', group = GRP_CLOSE)
-yellowDensitySize = input.string('Huge', 'Yellow Circle Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], inline = 'dens4', group = GRP_CLOSE)
-
-redCircleScore = input.float(100, 'Score per Red Circle', minval = 0, step = 1, group = GRP_CLOSE, tooltip = 'امتیاز هر دایره قرمز برای تشخیص قدرت روند')
-yellowCircleScore = input.float(40, 'Score per Yellow Circle', minval = 0, step = 1, group = GRP_CLOSE, tooltip = 'امتیاز هر دایره زرد برای تشخیص قدرت روند')
-showDensityTrendTable = input.bool(true, 'Show Density Trend Table', group = GRP_CLOSE, tooltip = 'جدول کوچک حدس روند بر اساس تعداد دایره‌های قرمز و زرد')
-densityMediumScore = input.float(100, 'Medium Strength Min Score', minval = 0, group = GRP_CLOSE, tooltip = 'اگر امتیاز سمت برنده ≥ این مقدار باشد → قدرت متوسط')
-densityStrongScore = input.float(250, 'Strong Strength Min Score', minval = 0, group = GRP_CLOSE, tooltip = 'اگر امتیاز سمت برنده ≥ این مقدار باشد → قدرت قوی')
-
-// شمارنده‌های دایره‌های تراکم: [redUp, redDn, yelUp, yelDn] — آرایه تا داخل تابع قابل تغییر باشد
-var g_densStats = array.new_int(4, 0)
-
-var table densityTrendTable = table.new(position = position.top_right, columns = 2, rows = 7, bgcolor = color.new(color.black, 0), border_color = color.new(color.gray, 50), border_width = 1, frame_color = color.new(color.gray, 50), frame_width = 2)
-
-resetDensityStats() =>
-    array.fill(g_densStats, 0)
-
-bumpDensityStat(bool isRedKind, bool isUp) =>
-    int idx = isRedKind ? (isUp ? 0 : 1) : (isUp ? 2 : 3)
-    array.set(g_densStats, idx, array.get(g_densStats, idx) + 1)
-
-// آرایه‌های موقتِ ثبت تارگت‌ها برای تشخیص هم‌پوشانی (Confluence)
-var g_targetPrices = array.new<float>()
-var g_targetXEnd   = array.new<int>()
-var g_targetColors = array.new<color>()
-var g_targetWeights = array.new<float>()
-var g_targetTrend  = array.new<bool>()
-var g_targetKeys   = array.new<string>()
-var g_targetIsNode = array.new<bool>()
-
-// فقط تارگت‌های نود که واقعاً روی چارت رسم شده‌اند (برای دایره قرمز/زرد)
-var g_visDensPrices = array.new<float>()
-var g_visDensXEnd   = array.new<int>()
-var g_visDensTrend  = array.new<bool>()
-
-resetVisibleDensity() =>
-    g_visDensPrices.clear()
-    g_visDensXEnd.clear()
-    g_visDensTrend.clear()
-
-registerVisibleDensity(float price, int xEnd, bool isUp) =>
-    if not na(price)
-        bool isDup = false
-        int n = g_visDensPrices.size()
-        if n > 0
-            for i = 0 to n - 1
-                if g_visDensTrend.get(i) == isUp and g_visDensPrices.get(i) == price
-                    isDup := true
-                    break
-        if not isDup
-            g_visDensPrices.push(price)
-            g_visDensXEnd.push(xEnd)
-            g_visDensTrend.push(isUp)
 
 // --- آرایه‌های جلوگیری از تداخل لیبل‌های تارگت (Label Anti-Overlap) ---
 var g_stagLabelPrice = array.new<float>()
 var g_stagLabelX     = array.new<int>()
-
-// --- ورودی‌های وزن‌دهی نود قدیمی/جدید ---
-var GRP_AGE = "Node Age Weight (Old vs New Targets)"
-nodeAgeWeightEnabled = input.bool(true, 'Enable Age-Based Weighting', group = GRP_AGE, tooltip = 'نودهای قدیمی‌تر امتیاز بیشتر، نودهای جدیدتر امتیاز کمتر می‌گیرند. تارگت‌های رند/سشن/روزانه همیشه امتیاز ثابت دارند.')
-nodeAgeStepPct = input.float(50.0, 'Age Weight Increase per Older Node (%)', minval = 0, maxval = 1000, step = 5, group = GRP_AGE, tooltip = 'هر نود قدیمی‌تر به این درصد امتیاز بیشتر می‌گیرد. مثال: ۵۰٪ یعنی نود جدید = ۱۰۰٪، یک نود قدیمی‌تر = ۱۵۰٪، دو نود قدیمی‌تر = ۲۰۰٪ و ...')
 
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 var GRP_LBL = "Target Label Anti-Overlap"
@@ -580,8 +534,6 @@ targetLabelPriceTolerancePct = input.float(0.05, 'Label Collision Tolerance (%)'
 targetLabelStaggerStep = input.int(18, 'Label Stagger Step (bars)', minval = 2, maxval = 200, group = GRP_LBL, tooltip = 'فاصله جلو‌رفتن هر لیبل متداخل بر حسب تعداد کندل')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC)')
 
-// جدول امتیازات — سمت راست بالای نمودار
-var table scoreTable = table.new(position = position.bottom_right, columns = 2, rows = 7, bgcolor = color.new(color.black, 0), border_color = color.new(color.gray, 50), border_width = 1, frame_color = color.new(color.gray, 50), frame_width = 2)
 
 // --- تابع جلوگیری از تداخل لیبل‌ها: اگر لیبل جدید با لیبل قبلی قیمتی نزدیک دارد، جلوتر می‌رود ---
 getStaggerX(float price, int baseX) =>
@@ -608,222 +560,9 @@ getStaggerX(float price, int baseX) =>
     g_stagLabelX.push(x)
     x
 
-// --- محاسبه ضریب سن نود: نود جدید = 1.0، هر نود قدیمی‌تر = ضریب بیشتر ---
-// ageFromNewest: 0 = جدیدترین، 1 = یک نود قدیمی‌تر، 2 = دو نود قدیمی‌تر و ...
-calcNodeAgeMult(int ageFromNewest) =>
-    if not nodeAgeWeightEnabled
-        1.0
-    else
-        1.0 + (ageFromNewest * nodeAgeStepPct / 100.0)
-
-resetTargetRegistry() =>
-    g_targetPrices.clear()
-    g_targetXEnd.clear()
-    g_targetColors.clear()
-    g_targetWeights.clear()
-    g_targetTrend.clear()
-    g_targetKeys.clear()
-    g_targetIsNode.clear()
+resetLabelStagger() =>
     g_stagLabelPrice.clear()
     g_stagLabelX.clear()
-    resetVisibleDensity()
-
-isNodeTargetKey(string key) =>
-    str.startswith(key, "Node") or str.startswith(key, "Pair")
-
-var GRP9 = "Target Confluence — Value Weights"
-targetDedupTolerancePct = input.float(0, 'Duplicate Target Filter (%)', minval = 0, maxval = 5, step = 0.01, group = GRP9, tooltip = 'اگر دو تارگت با هم روی یک روند از نظر قیمتی به این میزان درصد یا کمتر نزدیک باشند، فقط اولی ثبت می‌شود')
-
-registerTarget(float price, int xEnd, color col, float weight, bool isUp, float ageMult = 1.0, int xStart = bar_index, string key = "") =>
-    // اگر کلید خالی بود، یک کلید بر اساس قیمت و روند بساز
-    string targetKey = key
-    if targetKey == ""
-        targetKey := str.tostring(price) + "_" + str.tostring(isUp)
-    
-    // اعمال ضریب سن نود (نود قدیمی → وزن بیشتر، نود جدید → وزن کمتر)
-    float effectiveWeight = weight * ageMult
-    bool isDup = false
-    n = g_targetPrices.size()
-    if n > 0
-        for i = 0 to n - 1
-            // بررسی تکراری بودن بر اساس کلید
-            if g_targetKeys.get(i) == targetKey
-                isDup := true
-                break
-            // همچنین بررسی بر اساس قیمت و روند (برای سازگاری با کد قدیمی)
-            if g_targetTrend.get(i) == isUp
-                p = g_targetPrices.get(i)
-                refP = math.max(math.abs(p), 0.0000001)
-                diffPct = math.abs(p - price) / refP * 100
-                if diffPct <= targetDedupTolerancePct
-                    isDup := true
-                    break
-    
-    if not isDup
-        g_targetPrices.push(price)
-        g_targetXEnd.push(xEnd)
-        g_targetColors.push(col)
-        g_targetWeights.push(effectiveWeight)
-        g_targetTrend.push(isUp)
-        g_targetKeys.push(targetKey)
-        g_targetIsNode.push(isNodeTargetKey(targetKey))
-
-// === دایره‌های تراکم: قرمز (خیلی نزدیک) / زرد (کمی دورتر) ===
-// یک پاس با تلرانس زرد (بازتر)، بعد طبق عرض واقعی خوشه رنگ انتخاب می‌شود
-drawCloseTargetCircles() =>
-    resetDensityStats()
-    if showCloseTargetCircles and (showRedDensityCircle or showYellowDensityCircle)
-        float redTol = redDensityTolerancePct
-        float yellowTol = math.max(yellowDensityTolerancePct, redTol)
-        int minNeeded = math.min(redDensityMinCount, yellowDensityMinCount)
-        // فقط تارگت‌های نودی که واقعاً رسم شده‌اند
-        n = math.min(g_visDensPrices.size(), math.min(g_visDensXEnd.size(), g_visDensTrend.size()))
-        if n >= minNeeded
-            array<float> sortedPrices = array.copy(g_visDensPrices)
-            array<int>   sortedXEnd   = array.copy(g_visDensXEnd)
-            array<bool>  sortedTrend  = array.copy(g_visDensTrend)
-            // مرتب‌سازی صعودی قیمت
-            for i = 1 to n - 1
-                float pKey = sortedPrices.get(i)
-                int   xKey = sortedXEnd.get(i)
-                bool  tKey = sortedTrend.get(i)
-                int j = i - 1
-                while j >= 0 and sortedPrices.get(j) > pKey
-                    sortedPrices.set(j + 1, sortedPrices.get(j))
-                    sortedXEnd.set(j + 1, sortedXEnd.get(j))
-                    sortedTrend.set(j + 1, sortedTrend.get(j))
-                    j -= 1
-                sortedPrices.set(j + 1, pKey)
-                sortedXEnd.set(j + 1, xKey)
-                sortedTrend.set(j + 1, tKey)
-
-            array<bool> used = array.new<bool>(n, false)
-            for i = 0 to n - 1
-                if used.get(i) or not canDrawLabel()
-                    continue
-                bool trendI = sortedTrend.get(i)
-                float runMin = sortedPrices.get(i)
-                float runMax = runMin
-                int runMaxX = sortedXEnd.get(i)
-                array<int> cluster = array.new<int>()
-                cluster.push(i)
-                if i < n - 1
-                    for j = i + 1 to n - 1
-                        if used.get(j)
-                            continue
-                        float priceJ = sortedPrices.get(j)
-                        refP = math.max(math.abs(runMin), 0.0000001)
-                        // اگر از بازه زرد خارج شد، بقیه هم دورترند (آرایه مرتب است)
-                        widthProbe = (math.max(runMax, priceJ) - math.min(runMin, priceJ)) / refP * 100
-                        if widthProbe > yellowTol
-                            break
-                        // روند مخالف را رد کن؛ break نکن
-                        if sortedTrend.get(j) != trendI
-                            continue
-                        cluster.push(j)
-                        runMin := math.min(runMin, priceJ)
-                        runMax := math.max(runMax, priceJ)
-                        runMaxX := math.max(runMaxX, sortedXEnd.get(j))
-
-                int cSize = cluster.size()
-                // تکی را مصرف کن تا حلقه گیر نکند
-                if cSize < 2
-                    used.set(i, true)
-                    continue
-
-                for k = 0 to cSize - 1
-                    used.set(cluster.get(k), true)
-
-                refW = math.max(math.abs(runMin), 0.0000001)
-                float widthPct = (runMax - runMin) / refW * 100
-                float midPrice = (runMin + runMax) / 2.0
-
-                // قرمز: عرض خیلی کوچک | زرد: عرض بزرگ‌تر ولی داخل yellowTol
-                bool asRed = showRedDensityCircle and widthPct <= redTol and cSize >= redDensityMinCount
-                bool asYellow = showYellowDensityCircle and not asRed and widthPct <= yellowTol and cSize >= yellowDensityMinCount
-                // اگر خیلی نزدیک بود ولی به حد نصاب قرمز نرسید، در صورت امکان زرد شود
-                if not asRed and not asYellow and showYellowDensityCircle and widthPct <= yellowTol and cSize >= yellowDensityMinCount
-                    asYellow := true
-
-                if asRed or asYellow
-                    bumpDensityStat(asRed, trendI)
-                    string sizeStr = asRed ? redDensitySize : yellowDensitySize
-                    color dotColor = asRed ? redDensityColor : yellowDensityColor
-                    dotSize = switch sizeStr
-                        'Auto'   => size.auto
-                        'Huge'   => size.huge
-                        'Large'  => size.large
-                        'Normal' => size.normal
-                        'Small'  => size.small
-                        => size.tiny
-                    if canDrawLabel()
-                        circ = label.new(x = runMaxX, y = midPrice, text = "●", style = label.style_label_center, color = color.new(color.black, 100), textcolor = dotColor, size = dotSize)
-                        trackCircle(circ)
-
-fillDensityTrendTable() =>
-    if showDensityTrendTable
-        int redUp = array.get(g_densStats, 0)
-        int redDn = array.get(g_densStats, 1)
-        int yelUp = array.get(g_densStats, 2)
-        int yelDn = array.get(g_densStats, 3)
-        float upScore = redUp * redCircleScore + yelUp * yellowCircleScore
-        float dnScore = redDn * redCircleScore + yelDn * yellowCircleScore
-        float bias = upScore - dnScore
-        float winnerScore = math.max(upScore, dnScore)
-        string trendTxt = bias > 0 ? "▲ BULL" : bias < 0 ? "▼ BEAR" : "— FLAT"
-        color trendCol = bias > 0 ? color.lime : bias < 0 ? color.red : color.gray
-        string strengthTxt = winnerScore <= 0 ? "None" : winnerScore >= densityStrongScore ? "Strong" : winnerScore >= densityMediumScore ? "Medium" : "Weak"
-        color strengthCol = strengthTxt == "Strong" ? color.lime : strengthTxt == "Medium" ? color.orange : strengthTxt == "Weak" ? color.yellow : color.gray
-        int redTotal = redUp + redDn
-        int yelTotal = yelUp + yelDn
-
-        table.cell(densityTrendTable, 0, 0, text = "Density Trend", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 0, text = trendTxt, text_color = trendCol, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(trendCol, 20))
-        table.cell(densityTrendTable, 0, 1, text = "Strength", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 1, text = strengthTxt, text_color = strengthCol, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(strengthCol, 80))
-        table.cell(densityTrendTable, 0, 2, text = "▲ Score", text_color = color.lime, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 2, text = str.tostring(upScore, "#"), text_color = color.lime, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 0, 3, text = "▼ Score", text_color = color.red, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 3, text = str.tostring(dnScore, "#"), text_color = color.red, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 0, 4, text = "Red ●", text_color = redDensityColor, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 4, text = str.tostring(redTotal) + "  (" + str.tostring(redUp) + "↑ " + str.tostring(redDn) + "↓)", text_color = redDensityColor, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 0, 5, text = "Yellow ●", text_color = yellowDensityColor, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 5, text = str.tostring(yelTotal) + "  (" + str.tostring(yelUp) + "↑ " + str.tostring(yelDn) + "↓)", text_color = yellowDensityColor, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 0, 6, text = "Bias", text_color = color.aqua, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(densityTrendTable, 1, 6, text = (bias > 0 ? "+" : "") + str.tostring(bias, "#"), text_color = trendCol, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-    else
-        table.clear(densityTrendTable, 0, 0, 1, 6)
-
-// ================================================================================================
-// وزن‌های ارزش‌گذاری تارگت‌ها — همه در یکجا
-// ================================================================================================
-// --- وزن‌های تارگت تکی (نود ۱) ---
-targetWeightSingleMin        = input.float(200, 'Weight: Single Min Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Min تکی (نود ۱)')
-targetWeightSingleDouble     = input.float(100, 'Weight: Single Double Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Double تکی (نود ۱)')
-targetWeightSingleCorrection = input.float(30,  'Weight: Single Correction Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Correction تکی (نود ۱)')
-// --- وزن‌های تارگت زوجی (نود ۱+۲) ---
-targetWeightPairMin           = input.float(200, 'Weight: Pair Min Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Min زوجی (نود ۱+۲)')
-targetWeightPairMax           = input.float(100, 'Weight: Pair Max Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Max زوجی (نود ۱+۲)')
-targetWeightPairDouble        = input.float(50,  'Weight: Pair Double Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Double زوجی (نود ۱+۲)')
-targetWeightPairCorrection    = input.float(30,  'Weight: Pair Correction Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر تارگت Correction زوجی (نود ۱+۲)')
-// --- وزن تارگت قیمت رند ---
-roundTargetWeight             = input.float(200.0, 'Weight: Round Number Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی هر خط رند')
-// --- وزن‌های تارگت سشن ---
-sessionTargetWeightHigh       = input.float(80, 'Weight: Session High', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی سقف هر سشن')
-sessionTargetWeightLow        = input.float(80, 'Weight: Session Low', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی کف هر سشن')
-sessionTargetWeightMid        = input.float(50, 'Weight: Session Midline', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی میدلاین هر سشن')
-// --- وزن‌های اختصاصی توکیو (سشن C) ---
-tokyoTargetWeightHigh         = input.float(120, 'Weight: Tokyo Session High', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی سقف سشن توکیو')
-tokyoTargetWeightLow          = input.float(120, 'Weight: Tokyo Session Low', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی کف سشن توکیو')
-tokyoTargetWeightMid          = input.float(90,  'Weight: Tokyo Session Midline', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی میدلاین سشن توکیو')
-// --- وزن تارگت اپن/کلوز روزانه ---
-dayOCWeight                   = input.float(100, 'Weight: Day Open/Close Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی قیمت اپن امروز و کلوز دیروز')
-pocTargetWeight               = input.float(150, 'Weight: POV PoC Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی Point of Control')
-vahTargetWeight               = input.float(100, 'Weight: POV VAH Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی Value Area High')
-valTargetWeight               = input.float(100, 'Weight: POV VAL Target', minval = 0, group = GRP9, tooltip = 'ارزش امتیازی Value Area Low')
-
-// --- جدول امتیازات ---
-showScoreTable = input.bool(true, 'Show Score Table', group = GRP9, tooltip = 'جدول امتیازات و اطلاعات تارگت‌ها در گوشه بالا-راست نمودار')
 
 method initColor(series NDS this) =>
     this.colors.push(Color.new(this.settings.c1))
@@ -868,7 +607,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
             index = node.indexNode
             numberNode  = node.numberNode
             textColor = this.colors.get(indexColor).labelColor
-            // Symmetry nodes (**) display as single-star (*)
+            // Symmetry nodes display as single-star (*)
             string baseText = str.tostring(numberNode) + suffix
             string newText = baseText
             if i > 0
@@ -934,13 +673,14 @@ method drawingLineNodes(series NDS this) =>
             trackLine(line.new(secondPoint, thirdPoint ,color = lineColor ,width = lineWidth ))
 
 // ================================================================================================
-// تارگت‌های نود ۱ (Double + Min + Correction)
+// تارگت‌های نود ۱ (Double + Double0.86 + Min + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showMin, bool showCorrection, int doubleWidth, int minWidth, int correctionWidth, string doubleStyle, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     countNodes = nodesRef.size()
     lnStyleDouble     = doubleStyle     == 'Solid' ? line.style_solid : doubleStyle     == 'Dashed' ? line.style_dashed : line.style_dotted
+    lnStyleDouble086  = double086Style  == 'Solid' ? line.style_solid : double086Style  == 'Dashed' ? line.style_dashed : line.style_dotted
     lnStyleMin        = minStyle        == 'Solid' ? line.style_solid : minStyle        == 'Dashed' ? line.style_dashed : line.style_dotted
     lnStyleCorrection = correctionStyle == 'Solid' ? line.style_solid : correctionStyle == 'Dashed' ? line.style_dashed : line.style_dotted
 
@@ -967,12 +707,10 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         break
                     node = nodesRef.get(i)
                     lineColor = colorPerIndex.get(i)
-                    int totalDrawn1 = qualifyingTotal - skipCount
-                    float ageMult1 = calcNodeAgeMult(totalDrawn1 - seen)
                     moveSizeLog       = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
                     correctionSizeLog = math.abs(math.log(node.highNode) - math.log(node.lowCorrection))
 
-                    if showDouble and targetWeightSingleDouble > 0
+                    if showDouble
                         targetDoublePrice = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(targetDoublePrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
@@ -984,11 +722,26 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             midX = (node.indexNode + bar_index + gapBars) / 2
                             dLbl = label.new(x = midX, y = targetDoublePrice, text = trendPrefix + "Double 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(dLbl)
-                            string doubleKey = "Node1_Double_" + str.tostring(node.indexNode) + "_" + str.tostring(targetDoublePrice)
-                            registerTarget(targetDoublePrice, bar_index + gapBars, lineColor, targetWeightSingleDouble, swUptrendType, ageMult1, node.indexNode, doubleKey)
-                            registerVisibleDensity(targetDoublePrice, bar_index + gapBars, swUptrendType)
 
-                    if showMin and targetWeightSingleMin > 0
+                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت 0.86 دیگر لازم نیست
+                    bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
+                    if showDouble086 and not hasNode2
+                        // از ابتدای نود ۱ (lowPreNode) تا تارگت Double؛ نقطهٔ نسبت (پیش‌فرض 0.86)
+                        float startNode1 = node.lowPreNode
+                        float doubleEnd = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
+                        targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
+
+                        bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+
+                        if not shouldDelete086
+                            d086First  = chart.point.from_index(node.indexPreNode, targetDouble086Price)
+                            d086Second = chart.point.from_index(bar_index + gapBars, targetDouble086Price)
+                            trackLine(line.new(d086First, d086Second, color = color.new(lineColor, lineTransparency), width = double086Width, style = lnStyleDouble086))
+                            midX086 = (node.indexPreNode + bar_index + gapBars) / 2
+                            d086Lbl = label.new(x = midX086, y = targetDouble086Price, text = trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
+                            trackLabel(d086Lbl)
+
+                    if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
@@ -1000,11 +753,8 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             midX = (node.indexNode + bar_index + gapBars) / 2
                             mLbl = label.new(x = midX, y = targetMinPrice, text = trendPrefix + "Min 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(mLbl)
-                            string minKey = "Node1_Min_" + str.tostring(node.indexNode) + "_" + str.tostring(targetMinPrice)
-                            registerTarget(targetMinPrice, bar_index + gapBars, lineColor, targetWeightSingleMin, swUptrendType, ageMult1, node.indexNode, minKey)
-                            registerVisibleDensity(targetMinPrice, bar_index + gapBars, swUptrendType)
 
-                    if showCorrection and targetWeightSingleCorrection > 0
+                    if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(targetCorrectionPrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
@@ -1016,9 +766,6 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             midX = (node.indexNode + bar_index + gapBars) / 2
                             cLbl = label.new(x = midX, y = targetCorrectionPrice, text = trendPrefix + "Correction 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(cLbl)
-                            string corrKey = "Node1_Corr_" + str.tostring(node.indexNode) + "_" + str.tostring(targetCorrectionPrice)
-                            registerTarget(targetCorrectionPrice, bar_index + gapBars, lineColor, targetWeightSingleCorrection, swUptrendType, ageMult1, node.indexNode, corrKey)
-                            registerVisibleDensity(targetCorrectionPrice, bar_index + gapBars, swUptrendType)
 
 // ================================================================================================
 // تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
@@ -1057,11 +804,9 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                     node1 = nodesRef.get(i)
                     node2 = nodesRef.get(i+1)
                     lineColor = colorPerIndex.get(i)
-                    int totalDrawnPair = pairTotal - skipCount
-                    float ageMultPair = calcNodeAgeMult(totalDrawnPair - seen)
                     totalMoveLog = math.abs(math.log(node2.highNode) - math.log(node1.lowPreNode))
 
-                    if showMin and targetWeightPairMin > 0
+                    if showMin
                         minPrice = swUptrendType ? math.exp(math.log(node1.lowCorrection) + totalMoveLog) : math.exp(math.log(node1.lowCorrection) - totalMoveLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(minPrice, node1.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
@@ -1072,11 +817,8 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             trackLine(line.new(f1, s1, color = color.new(lineColor, lineTransparency), width = minWidth, style = lnStyleMin))
                             midX = (node1.indexNode + bar_index + gapBars) / 2
                             trackLabel(label.new(x = midX, y = minPrice, text = trendPrefix + "Min 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
-                            string minKey = "Pair12_Min_" + str.tostring(node1.indexNode) + "_" + str.tostring(node2.indexNode) + "_" + str.tostring(minPrice)
-                            registerTarget(minPrice, bar_index + gapBars, lineColor, targetWeightPairMin, swUptrendType, ageMultPair, node1.indexNode, minKey)
-                            registerVisibleDensity(minPrice, bar_index + gapBars, swUptrendType)
 
-                    if showMax and targetWeightPairMax > 0
+                    if showMax
                         maxPrice = swUptrendType ? math.exp(math.log(node2.lowCorrection) + totalMoveLog) : math.exp(math.log(node2.lowCorrection) - totalMoveLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(maxPrice, node2.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
@@ -1087,11 +829,8 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             trackLine(line.new(f2, s2, color = color.new(lineColor, lineTransparency), width = maxWidth, style = lnStyleMax))
                             midX = (node2.indexNode + bar_index + gapBars) / 2
                             trackLabel(label.new(x = midX, y = maxPrice, text = trendPrefix + "Max 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
-                            string maxKey = "Pair12_Max_" + str.tostring(node1.indexNode) + "_" + str.tostring(node2.indexNode) + "_" + str.tostring(maxPrice)
-                            registerTarget(maxPrice, bar_index + gapBars, lineColor, targetWeightPairMax, swUptrendType, ageMultPair, node2.indexNode, maxKey)
-                            registerVisibleDensity(maxPrice, bar_index + gapBars, swUptrendType)
 
-                    if showDouble and targetWeightPairDouble > 0
+                    if showDouble
                         dblPrice = swUptrendType ? math.exp(math.log(node2.highNode) + totalMoveLog) : math.exp(math.log(node2.highNode) - totalMoveLog)
 
                         bool shouldDelete = shouldDeleteHitTarget(dblPrice, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
@@ -1102,11 +841,8 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             trackLine(line.new(f3, s3, color = color.new(lineColor, lineTransparency), width = doubleWidth, style = lnStyleDouble))
                             midX = (node2.indexNode + bar_index + gapBars) / 2
                             trackLabel(label.new(x = midX, y = dblPrice, text = trendPrefix + "Double 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
-                            string dblKey = "Pair12_Double_" + str.tostring(node1.indexNode) + "_" + str.tostring(node2.indexNode) + "_" + str.tostring(dblPrice)
-                            registerTarget(dblPrice, bar_index + gapBars, lineColor, targetWeightPairDouble, swUptrendType, ageMultPair, node2.indexNode, dblKey)
-                            registerVisibleDensity(dblPrice, bar_index + gapBars, swUptrendType)
 
-                    if showCorrection and targetWeightPairCorrection > 0
+                    if showCorrection
                         correctionSizeLog2 = math.abs(math.log(node2.highNode) - math.log(node2.lowCorrection))
                         corrPrice12 = swUptrendType ? math.exp(math.log(node2.highNode) + correctionSizeLog2) : math.exp(math.log(node2.highNode) - correctionSizeLog2)
 
@@ -1118,9 +854,6 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             trackLine(line.new(f4, s4, color = color.new(lineColor, lineTransparency), width = correctionWidth, style = lnStyleCorrection))
                             midX = (node2.indexNode + bar_index + gapBars) / 2
                             trackLabel(label.new(x = midX, y = corrPrice12, text = trendPrefix + "Correction 2", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
-                            string corrKey = "Pair12_Corr_" + str.tostring(node1.indexNode) + "_" + str.tostring(node2.indexNode) + "_" + str.tostring(corrPrice12)
-                            registerTarget(corrPrice12, bar_index + gapBars, lineColor, targetWeightPairCorrection, swUptrendType, ageMultPair, node2.indexNode, corrKey)
-                            registerVisibleDensity(corrPrice12, bar_index + gapBars, swUptrendType)
 
 //#endregion
 
@@ -1129,8 +862,8 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
 // ================================================================================================
 //#region ———————————————————— ROUND NUMBER TARGETS
 
-drawRoundNumberTargets(float basePrice, float weightVal, bool isUp, int gapBars, bool deleteHit, int hitGraceBars, int lineWidth, string lineStyleStr, int lineTransparency, color lineColor, float minVisiblePrice, int historyBars, bool drawVisual) =>
-    if basePrice > 0 and weightVal > 0
+drawRoundNumberTargets(float basePrice, bool isUp, int gapBars, bool deleteHit, int hitGraceBars, int lineWidth, string lineStyleStr, int lineTransparency, color lineColor, float minVisiblePrice, int historyBars, bool drawVisual) =>
+    if basePrice > 0
         int lookback = math.min(historyBars, bar_index)
         float chartLow  = lookback > 0 ? ta.lowest(low, lookback + 1) : low[0]
         float chartHigh = lookback > 0 ? ta.highest(high, lookback + 1) : high[0]
@@ -1170,135 +903,9 @@ drawRoundNumberTargets(float basePrice, float weightVal, bool isUp, int gapBars,
                         trackLine(line.new(rFirst, rSecond, color = color.new(lineColor, lineTransparency), width = lineWidth, style = lnStyle))
                         rLbl = label.new(x = midX, y = roundPrice, text = trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                         trackLabel(rLbl)
-                    string roundKey = "Round_" + str.tostring(roundPrice) + "_" + str.tostring(isUp)
-                    registerTarget(roundPrice, lineEndIdx, lineColor, weightVal, isUp, 1.0, lineStartIdx, roundKey)
 
 //#endregion
 
-// ================================================================================================
-// بخش ۵-ب: تشخیص و هایلایت نواحی هم‌پوشانِ تارگت‌ها (Confluence Zones)
-// ================================================================================================
-//#region ———————————————————— CONFLUENCE ZONES
-
-drawConfluenceZones(float tolerancePercent, float maxWidthPrice, int minTargetsInZone, int topZonesCount, int zoneLength, color zoneColor, color topBgColor, int historyBars, int labelOffsetBars, string labelSizeTop, string labelSizeOther) =>
-    n = canDrawBox() ? math.min(g_targetPrices.size(), math.min(g_targetXEnd.size(), g_targetWeights.size())) : 0
-    if n > 1
-        used = array.new<bool>(n, false)
-
-        array<float> zMinP  = array.new<float>()
-        array<float> zMaxP  = array.new<float>()
-        array<int>   zMaxX  = array.new<int>()
-        array<float> zScore = array.new<float>()
-        array<int>   zCount = array.new<int>()
-        array<bool>  zIsUp  = array.new<bool>()
-
-        for i = 0 to n - 1
-            if i < used.size() and not used.get(i)
-                array<int> clusterIdx = array.new<int>()
-                clusterIdx.push(i)
-                pi = g_targetPrices.get(i)
-                trendI = g_targetTrend.get(i)
-                runMin = pi
-                runMax = pi
-                // نکته مهم Pine: وقتی i == n-1، "i+1 to n-1" جهتش برعکس می‌شود و ایندکس n
-                // (خارج از محدوده) خوانده می‌شود؛ پس صریحاً گارد می‌کنیم
-                if i < n - 1
-                    for j = i + 1 to n - 1
-                        if j < used.size() and not used.get(j)
-                            pj = g_targetPrices.get(j)
-                            trendJ = g_targetTrend.get(j)
-                            refPrice = math.max(math.abs(pi), 0.0000001)
-                            diffPct = math.abs(pi - pj) / refPrice * 100
-                            candidateMin = math.min(runMin, pj)
-                            candidateMax = math.max(runMax, pj)
-                            if trendJ == trendI and diffPct <= tolerancePercent and (candidateMax - candidateMin) <= maxWidthPrice
-                                clusterIdx.push(j)
-                                runMin := candidateMin
-                                runMax := candidateMax
-                if clusterIdx.size() >= minTargetsInZone
-                    minP = 999999999.0
-                    maxP = 0.0
-                    maxX = 0
-                    score = 0.0
-                    for k = 0 to clusterIdx.size() - 1
-                        idx = clusterIdx.get(k)
-                        if idx < used.size()
-                            used.set(idx, true)
-                        p = g_targetPrices.get(idx)
-                        minP  := math.min(minP, p)
-                        maxP  := math.max(maxP, p)
-                        maxX  := math.max(maxX, g_targetXEnd.get(idx))
-                        score += g_targetWeights.get(idx)
-                    if (maxP - minP) > maxWidthPrice
-                        midP = (maxP + minP) / 2
-                        maxP := midP + maxWidthPrice / 2
-                        minP := midP - maxWidthPrice / 2
-                    if maxP == minP
-                        pad = math.min(maxP * (tolerancePercent / 100) * 0.5, maxWidthPrice * 0.5)
-                        maxP := maxP + pad
-                        minP := minP - pad
-                    zMinP.push(minP)
-                    zMaxP.push(maxP)
-                    zMaxX.push(maxX)
-                    zScore.push(score)
-                    zCount.push(clusterIdx.size())
-                    zIsUp.push(trendI)
-
-        zoneTotal = zScore.size()
-        if zoneTotal > 0
-            zoneUsed = array.new<bool>(zoneTotal, false)
-            for pickUp = 1 to topZonesCount
-                bestIdx = -1
-                bestScore = -1.0
-                for z = 0 to zoneTotal - 1
-                    if z < zoneUsed.size() and not zoneUsed.get(z) and zIsUp.get(z)
-                        if zScore.get(z) > bestScore
-                            bestScore := zScore.get(z)
-                            bestIdx   := z
-                if bestIdx < 0
-                    break
-                zoneUsed.set(bestIdx, true)
-                minP  = zMinP.get(bestIdx)
-                maxP  = zMaxP.get(bestIdx)
-                maxX  = zMaxX.get(bestIdx)
-                score = zScore.get(bestIdx)
-                bool isTop = pickUp == 1
-                color useBg = isTop ? topBgColor : zoneColor
-                zoneLeft = math.max(maxX - zoneLength, bar_index - historyBars)
-                b = box.new(left = zoneLeft, top = maxP, right = maxX, bottom = minP, bgcolor = useBg, border_color = color.new(color.black, 100), border_width = 0, border_style = line.style_solid)
-                trackBox(b)
-                color lblColor = isTop ? topBgColor : zoneColor
-                string starPrefix = isTop ? "⭐ " : ""
-                zLbl = label.new(x = zoneLeft - labelOffsetBars, y = maxP, text = starPrefix + str.tostring(score, "#"), style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(lblColor, 0), size = isTop ? textSizeFromString(labelSizeTop) : textSizeFromString(labelSizeOther))
-                trackLabel(zLbl)
-
-            for pickDn = 1 to topZonesCount
-                bestIdx = -1
-                bestScore = -1.0
-                for z = 0 to zoneTotal - 1
-                    if z < zoneUsed.size() and not zoneUsed.get(z) and not zIsUp.get(z)
-                        if zScore.get(z) > bestScore
-                            bestScore := zScore.get(z)
-                            bestIdx   := z
-                if bestIdx < 0
-                    break
-                zoneUsed.set(bestIdx, true)
-                minP  = zMinP.get(bestIdx)
-                maxP  = zMaxP.get(bestIdx)
-                maxX  = zMaxX.get(bestIdx)
-                score = zScore.get(bestIdx)
-                bool isTop = pickDn == 1
-                color useBg = isTop ? topBgColor : zoneColor
-                zoneLeft = math.max(maxX - zoneLength, bar_index - historyBars)
-                b = box.new(left = zoneLeft, top = maxP, right = maxX, bottom = minP, bgcolor = useBg, border_color = color.new(color.black, 100), border_width = 0, border_style = line.style_solid)
-                trackBox(b)
-                color lblColor = isTop ? topBgColor : zoneColor
-                string starPrefix = isTop ? "⭐ " : ""
-                zLbl = label.new(x = zoneLeft - labelOffsetBars, y = maxP, text = starPrefix + str.tostring(score, "#"), style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(lblColor, 0), size = isTop ? textSizeFromString(labelSizeTop) : textSizeFromString(labelSizeOther))
-                trackLabel(zLbl)
-
-//#endregion
-// ================================================================================================
 //#region ———————————————————— INIT & ENGINE
 
 method initFirst(series NDS this) =>
@@ -1332,13 +939,13 @@ endPointInput   = input.int(0, 'End Point (Final)', group = GRP2, minval = 0 , m
 
 var GRP1 = "Strategy Config"
 swCalcLogarithm = input.bool(true, 'Calc Nodes with Logarithm' , group = GRP1, tooltip = 'فقط روی محاسبه‌ی خودِ نودها و سیمتری اثر دارد. تارگت‌ها همیشه بر حسب لگاریتم محاسبه می‌شوند.')
-nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'ستاره‌دار: نودهای 1* (شامل سیمتری که قبلاً ** بود) با خطوط و تارگت‌ها. بدون ستاره: فقط نودهای معمولی 1 و 2.')
+nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'Starred = فقط موتور سیمتری (cNodeSym). Starless = فقط موتور بدون سیمتری (cNodeNoSym). هم‌زمان اجرا نمی‌شوند.')
 verticalGapInput = input.int(0, 'Vertical Gap: Symmetry vs No-Symmetry (lines)', minval = 0, maxval = 15, group = GRP1, tooltip = "تعداد خط خالی فاصله عمودی بین عدد ستاره‌دار (سیمتری) و عدد بدون ستاره")
 showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', group = GRP1)
 showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
 
 var GRP5 = "Node Targets — Master Switches"
-enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + Min + Correction)', group = GRP5)
+enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + Double0.86 + Min + Correction)', group = GRP5)
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
 showTargetNode1Down = input.bool(true, 'Apply to Down Trend', inline = "trend1", group = GRP5)
@@ -1348,27 +955,12 @@ deleteHitTargets = input.bool(true, 'Delete Hit Targets (auto-remove when price 
 hitGraceBarsInput = input.int(2, 'Hit Target Grace Period (bars)', minval = 0, maxval = 500, group = GRP5, tooltip = 'تارگت‌هایی که قیمت به آنها رسیده باشد، حداقل به مدت این تعداد کندل دیگر نمایش داده می‌شوند و سپس حذف می‌شوند')
 targetLineTransparency = input.int(60, 'Target Lines Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP5)
 
-var GRP8 = "Target Confluence Zones (Important Areas)"
-enableConfluenceZones = input.bool(true, 'Highlight Confluence Zones', group = GRP8)
-confluenceTolerancePct = input.float(0.02, 'Zone Tolerance (%)', minval = 0.01, maxval = 10.0, step = 0.05, group = GRP8)
-confluenceMinTargets = input.int(2, 'Minimum Targets to Form a Zone', minval = 2, maxval = 10, group = GRP8)
-confluenceATRLength = input.int(10, 'Zone Width ATR Period', minval = 1, maxval = 200, group = GRP8)
-confluenceATRMultiplier = input.float(1.0, 'Zone Width ATR Multiplier', minval = 0.1, step = 0.1, group = GRP8)
-confluenceTopZonesCount = input.int(3, 'Show Top N Zones by Value', minval = 1, maxval = 50, group = GRP8)
-confluenceZoneLength = input.int(50, 'Zone Length (bars)', minval = 5, maxval = 5000, group = GRP8)
-confluenceLabelOffsetBars = input.int(-100, 'Zone Score Label Distance (bars, +left/-right)', minval = -500, maxval = 500, group = GRP8)
-confluenceLabelSizeTop   = input.string('Large', 'Zone Score Label Size (Top Zone)', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP8)
-confluenceLabelSizeOther = input.string('Normal', 'Zone Score Label Size (Other Zones)', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP8)
-confluenceZoneColor = input.color(color.new(color.yellow, 82), 'Zone Background Color (Others)', group = GRP8)
-confluenceTopBgColor = input.color(color.new(color.red, 70), 'Top Zone Background Color (Highest Score)', group = GRP8)
-
-
 var GRP10 = "Round Number Targets (Psychological Levels)"
 enableRoundTargets      = input.bool(false, 'Show Round Number Targets', group = GRP10)
 roundBasePrice          = input.float(10.0, 'Round Number Base Price', minval = 0.0001, step = 0.1, group = GRP10)
 roundApplyUp            = input.bool(true, 'Apply Round Numbers to Up Trend', inline = 'rnd1', group = GRP10)
 roundApplyDown          = input.bool(true, 'Apply Round Numbers to Down Trend', inline = 'rnd1', group = GRP10)
-// === تارگت‌های رند هرگز با رسیدن قیمت حذف نمی‌شوند و امتیازشان همیشه باقی می‌ماند ===
+// Round targets are never auto-deleted on hit
 roundDeleteHit          = false
 roundHitGraceBars       = 0
 roundLineWidth          = input.int(1, 'Round Number Line Width', minval = 1, maxval = 4, group = GRP10)
@@ -1379,12 +971,16 @@ roundMinVisiblePrice    = input.float(3000.0, 'Round Min Visible Price (0=auto)'
 
 var GRP6 = "Node 1 Targets (Single)"
 showTargetDoubleInput     = input.bool(true, 'Show Target Double (from node itself)', group = GRP6)
+showTargetDouble086Input  = input.bool(true, 'Show Target Double 0.86 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
+double086Ratio            = input.float(0.86, 'Start→Double Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۶')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDouble086Width  = input.int(1, 'Target Double 0.86 Line Width', minval = 1, maxval = 4, group = GRP6)
 targetMinWidth        = input.int(3, 'Target Min Line Width', minval = 1, maxval = 4, group = GRP6)
 targetCorrectionWidth = input.int(1, 'Target Correction Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDoubleStyle     = input.string('Dashed', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble086Style  = input.string('Dotted', 'Target Double 0.86 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetMinStyle        = input.string('Solid', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetCorrectionStyle = input.string('Dashed', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetNode1MaxCount = input.int(20, 'Number of Last Nodes to Target', minval = 1, maxval = 500, group = GRP6)
@@ -1433,8 +1029,6 @@ n8 = input.color(defval = color.red, inline = "16", group = GRP4)
 // ================================================================================================
 //#region ———————————————————— EXECUTION
 
-atrValue = ta.atr(confluenceATRLength)
-computedZoneMaxWidth = atrValue * confluenceATRMultiplier
 
 var Settings settingsSym = Settings.new(
      startPointInput, endPointInput,
@@ -1457,8 +1051,11 @@ var Settings settingsNoSym = Settings.new(
 var NDS cNodeSym   = newInstance(settingsSym)
 var NDS cNodeNoSym = newInstance(settingsNoSym)
 
-cNodeSym.calc()
-cNodeNoSym.calc()
+// فقط یک موتور در هر لحظه — پیش‌فرض Starred = cNodeSym
+if nodeDisplayMode == 'Starred'
+    cNodeSym.calc()
+else
+    cNodeNoSym.calc()
 
 method countStarlessNode1(series NDS this, bool swUptrendType) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
@@ -1472,7 +1069,11 @@ method countStarlessNode1(series NDS this, bool swUptrendType) =>
 
 if bar_index == last_bar_index
     clearDrawings()
-    resetTargetRegistry()
+    resetLabelStagger()
+
+    // یک‌بار کل پنجره hit را آماده کن؛ بعد هر تارگت O(1) چک می‌شود
+    if deleteHitTargets
+        prepareHitWindow(hitGraceBarsInput)
 
     bool showStarred  = nodeDisplayMode == 'Starred'
     bool showStarless = nodeDisplayMode == 'Starless'
@@ -1492,9 +1093,9 @@ if bar_index == last_bar_index
 
     if enableSingleNode1Targets
         if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
         if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
 
     if enablePairNode12Targets
         if showTargetNode1Up
@@ -1504,11 +1105,10 @@ if bar_index == last_bar_index
 
     if enableRoundTargets
         if roundApplyUp
-            drawRoundNumberTargets(roundBasePrice, roundTargetWeight, true,  targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, true)
+            drawRoundNumberTargets(roundBasePrice, true,  targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, true)
         if roundApplyDown
-            drawRoundNumberTargets(roundBasePrice, roundTargetWeight, false, targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, not roundApplyUp)
+            drawRoundNumberTargets(roundBasePrice, false, targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, not roundApplyUp)
 
-    // رسم دایره‌های قرمز برای تارگت‌های نزدیک
 
 //#endregion
 
@@ -1592,13 +1192,15 @@ midline_style = input.string(line.style_dashed, "Middle Line Style", options = [
 midline_width = input.int(1, 'Middle Line Width', minval=1, maxval=5, group = 'Ranges Settings')
 midline_transp = input.int(0, 'Middle Line Transparency', minval=0, maxval=100, group = 'Ranges Settings')
 
-// === تغییر ۲ و ۴: تنظیمات تارگت سشن (بدون وزن — وزن‌ها به GRP9 منتقل شدند) ===
+// Session target line settings
 var GRP_SESTGT = "Session Targets"
-enableSessionTargets = input.bool(true, 'Show Session High/Low/Midline as Targets', group = GRP_SESTGT, tooltip = 'سقف، کف و میدلاین هر سشن به‌عنوان تارگت رسم و در سیستم امتیازدهی لحاظ می‌شود (فقط سشن‌های امروز امتیاز دارند)')
+enableSessionTargets = input.bool(true, 'Show Session High/Low/Midline as Targets', group = GRP_SESTGT, tooltip = 'سقف، کف و میدلاین هر سشن به‌عنوان تارگت رسم می‌شود')
 applySessionHigh = input.bool(true, 'Include Session High (Top)', inline = 'sestgt1', group = GRP_SESTGT)
 applySessionLow  = input.bool(true, 'Include Session Low (Bottom)', inline = 'sestgt1', group = GRP_SESTGT)
 applySessionMid  = input.bool(true, 'Include Session Midline', inline = 'sestgt1', group = GRP_SESTGT)
-sessionTargetLineWidth  = input.int(1, 'Session Target Line Width', minval = 1, maxval = 4, group = GRP_SESTGT)
+sessionHighLineWidth = input.int(1, 'Session High Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
+sessionLowLineWidth  = input.int(1, 'Session Low Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
+sessionMidLineWidth  = input.int(1, 'Session Mid Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
 sessionTargetLineStyle  = input.string('Dotted', 'Session Target Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP_SESTGT)
 sessionTargetLineTransparency = input.int(60, 'Session Target Line Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP_SESTGT)
 
@@ -1902,186 +1504,10 @@ if dayCountOpenClose <= 2
             line.set_style(dayCloseHistLine, closeLnStyle)
 
 // ================================================================================================
-// بخش ج: ثبت سقف/کف/میدلاین هر سشن به‌عنوان تارگت + اپن/کلوز روزانه + پنل + زون‌ها
+// بخش ج: ثبت سقف/کف/میدلاین هر سشن به‌عنوان تارگت + اپن/کلوز روزانه + پنل
 // ================================================================================================
-//#region ———————————————————— SESSION TARGETS → CONFLUENCE ZONES
+//#region ———————————————————— SESSION TARGETS
 
-
-// ================================================================================================
-// بخش POV: Pivot-Anchored Volume Profile (PoC / VAH / VAL)
-// ================================================================================================
-//#region ———————————————————— POV VOLUME PROFILE
-
-enablePovProfile = input.bool(true, 'Enable Pivot Volume Profile (PoC/VAH/VAL)', group = 'Pivot Points Volume Profile')
-pvtLength = input.int(20, 'Pivot Points Left / Right Length', minval = 1, group = 'Pivot Points Volume Profile', tooltip = 'طول تشخیص پیوت (چپ/راست) برای پروفایل‌های تاریخی بین پیوت‌ها')
-povDevLookbackMode = input.string('Fixed', 'Developing PoC Lookback Mode', options = ['Fixed', 'Auto (from last pivot)'], group = 'Pivot Points Volume Profile', tooltip = 'Fixed = تعداد کندل ثابت برای رسم PoC/VAH/VAL فعلی | Auto = از آخرین پیوت تا الان')
-povDevLookbackBars = input.int(100, 'Candles Back for PoC / VAH / VAL', minval = 5, maxval = 5000, group = 'Pivot Points Volume Profile', tooltip = 'چند کندل قبل برای محاسبه و رسم PoC / VAH / VAL فعلی (فقط وقتی Mode = Fixed)')
-isValueArea = input.float(68, 'Value Area Volume %', minval = 0, maxval = 100, group = 'Pivot Points Volume Profile') / 100
-pointOfControl = input.bool(true, 'Point of Control (PoC)', inline = 'PoC', group = 'Pivot Points Volume Profile')
-pocColor       = input.color(color.new(#ff0000, 0), '', inline = 'PoC', group = 'Pivot Points Volume Profile')
-pocExtend = input.string('None', 'Extend Point of Control (PoC)', options = ['Until Last Bar', 'Until Bar Cross', 'Until Bar Touch', 'None'], group = 'Pivot Points Volume Profile')
-valueAreaHigh = input.bool(true, 'Value Area High (VAH)', inline = 'VAH', group = 'Pivot Points Volume Profile')
-vahColor      = input.color(color.new(#2962ff, 0), '', inline = 'VAH', group = 'Pivot Points Volume Profile')
-valueAreaLow = input.bool(true, 'Value Area Low (VAL)', inline = 'VAL', group = 'Pivot Points Volume Profile')
-valColor     = input.color(color.new(#2962ff, 0), '', inline = 'VAL', group = 'Pivot Points Volume Profile')
-profileLevels = input.int(25, 'Number of Rows', minval = 10, maxval = 100, step = 1, group = 'Pivot Points Volume Profile')
-showHistoricalPov = input.bool(false, 'Show Historical PoC/VAH/VAL', group = 'Pivot Points Volume Profile', tooltip = 'اگر خاموش باشد فقط پروفایل فعلی (Developing) رسم می‌شود و چارت خلوت می‌ماند')
-povMaxPocHistory = input.int(2, 'Max Red PoC Boxes (History)', minval = 0, maxval = 50, group = 'Pivot Points Volume Profile', tooltip = 'حداکثر تعداد باکس قرمز PoC تاریخی روی چارت')
-povMaxVahValHistory = input.int(2, 'Max Blue VAH/VAL Segments (History)', minval = 0, maxval = 50, group = 'Pivot Points Volume Profile', tooltip = 'حداکثر تعداد سگمنت آبی VAH و VAL تاریخی (هر سگمنت = یک VAH + یک VAL)')
-registerPovAsTargets = input.bool(true, 'Register PoC/VAH/VAL as Targets', group = 'Pivot Points Volume Profile', tooltip = 'فقط سطوح فعلی Developing را به‌عنوان تارگت ثبت می‌کند')
-
-pov_trimBoxHistory(arrayOfBoxes, int maxKeep) =>
-    while array.size(arrayOfBoxes) > maxKeep
-        box.delete(array.shift(arrayOfBoxes))
-
-pov_trimLineHistory(arrayOfLines, int maxKeep) =>
-    while array.size(arrayOfLines) > maxKeep
-        line.delete(array.shift(arrayOfLines))
-
-pov_drawOnlyLineX(_x1, _y1, _x2, _y2, _xloc, _extend, _color, _style, _width) =>
-    line.new(_x1, _y1, _x2, _y2, _xloc, _extend, _color, _style, _width)
-
-pov_drawLineX(_x1, _y1, _x2, _y2, _xloc, _extend, _color, _style, _width) =>
-    var id = line.new(_x1, _y1, _x2, _y2, _xloc, _extend, _color, _style, _width)
-    line.set_xy1(id, _x1, _y1)
-    line.set_xy2(id, _x2, _y2)
-    line.set_color(id, _color)
-    id
-
-pov_getHighLow(_len, _calc, _offset) =>
-    if _calc
-        htf_l = low[_offset]
-        htf_h = high[_offset]
-        vol = 0.
-        for x = 0 to _len - 1 by 1
-            htf_l := math.min(low[_offset + x], htf_l)
-            htf_h := math.max(high[_offset + x], htf_h)
-            vol := vol + volume[_offset + x]
-        htf_l := math.min(low[_offset + _len], htf_l)
-        htf_h := math.max(high[_offset + _len], htf_h)
-        [htf_h, htf_l, vol]
-    else
-        [na, na, na]
-
-pov_checkBreaches(arrayOfBoxes, extend) =>
-    int qtyOfBoxes = array.size(arrayOfBoxes)
-    for boxNo = 0 to qtyOfBoxes > 0 ? qtyOfBoxes - 1 : na by 1
-        if boxNo < array.size(arrayOfBoxes)
-            box currentBox = array.get(arrayOfBoxes, boxNo)
-            float boxMidLevel = math.avg(box.get_bottom(currentBox), box.get_top(currentBox))
-            bool boxWasCrossed = math.sign(close[1] - boxMidLevel) != math.sign(close - boxMidLevel)
-            bool boxWasTouched = math.sign(close[1] - boxMidLevel) != math.sign(low - boxMidLevel) or math.sign(close[1] - boxMidLevel) != math.sign(high - boxMidLevel)
-            if boxWasCrossed and extend == 'Until Bar Cross'
-                array.remove(arrayOfBoxes, boxNo)
-                int(na)
-            else if boxWasTouched and extend == 'Until Bar Touch'
-                array.remove(arrayOfBoxes, boxNo)
-                int(na)
-            else
-                box.set_right(currentBox, bar_index)
-                int(na)
-
-pov_fillVolumeProfile(_len, _offset, _priceLowest, _priceStep, _volumeStorage) =>
-    array.fill(_volumeStorage, 0.)
-    for barIndexx = 1 to _len by 1
-        level = 0
-        barIndex = barIndexx + _offset
-        for priceLevel = _priceLowest to _priceLowest + _priceStep * profileLevels by _priceStep
-            if high[barIndex] >= priceLevel and low[barIndex] < priceLevel + _priceStep
-                barRange = high[barIndex] - low[barIndex]
-                array.set(_volumeStorage, level, array.get(_volumeStorage, level) + nz(volume[barIndex]) * (barRange == 0 ? 1 : _priceStep / barRange))
-            level += 1
-
-pov_calcValueArea(_volumeStorage, _pocLevel) =>
-    totalVolumeTraded = array.sum(_volumeStorage) * isValueArea
-    valueArea = array.get(_volumeStorage, _pocLevel)
-    levelAbove = _pocLevel
-    levelBelow = _pocLevel
-    while valueArea < totalVolumeTraded
-        if levelBelow == 0 and levelAbove == profileLevels - 1
-            break
-        volumeAbove = levelAbove < profileLevels - 1 ? array.get(_volumeStorage, levelAbove + 1) : 0.
-        volumeBelow = levelBelow > 0 ? array.get(_volumeStorage, levelBelow - 1) : 0.
-        if volumeAbove == 0 and volumeBelow == 0
-            break
-        if volumeAbove >= volumeBelow
-            valueArea += volumeAbove
-            levelAbove += 1
-        else
-            valueArea += volumeBelow
-            levelBelow -= 1
-    [levelAbove, levelBelow]
-
-volumeStorageT = array.new_float(profileLevels + 1, 0.)
-var a_poc = array.new_box()
-var a_vahHist = array.new_line()
-var a_valHist = array.new_line()
-var pov_x1 = 0
-var pov_x2 = 0
-var levelAbovePoc = 0
-var levelBelowPoc = 0
-var pocLevel = 0
-var float pov_devPocPrice = na
-var float pov_devVahPrice = na
-var float pov_devValPrice = na
-
-pvtHigh = enablePovProfile ? ta.pivothigh(pvtLength, pvtLength) : na
-pvtLow = enablePovProfile ? ta.pivotlow(pvtLength, pvtLength) : na
-proceed = enablePovProfile and (not na(pvtHigh) or not na(pvtLow))
-
-if proceed
-    pov_x1 := pov_x2
-    pov_x2 := bar_index
-    profileLength = pov_x2 - pov_x1
-    [priceHighest, priceLowest, _] = pov_getHighLow(profileLength, proceed, pvtLength)
-    priceStep = (priceHighest - priceLowest) / profileLevels
-    nzVolume = nz(volume)
-    if showHistoricalPov and proceed and nzVolume > 0 and priceStep > 0 and bar_index > profileLength and profileLength > 0
-        pov_fillVolumeProfile(profileLength, pvtLength, priceLowest, priceStep, volumeStorageT)
-        pocLevel := array.indexof(volumeStorageT, array.max(volumeStorageT))
-        [levelAbove, levelBelow] = pov_calcValueArea(volumeStorageT, pocLevel)
-        levelAbovePoc := levelAbove
-        levelBelowPoc := levelBelow
-        if pointOfControl and povMaxPocHistory > 0
-            array.push(a_poc, box.new(bar_index[pvtLength] - profileLength, priceLowest + (pocLevel + .40) * priceStep, bar_index[pvtLength], priceLowest + (pocLevel + .60) * priceStep, pocColor, bgcolor = pocColor))
-            pov_trimBoxHistory(a_poc, povMaxPocHistory)
-        if valueAreaHigh and povMaxVahValHistory > 0
-            array.push(a_vahHist, pov_drawOnlyLineX(bar_index[pvtLength] - profileLength, priceLowest + (levelAbovePoc + 1.00) * priceStep, bar_index[pvtLength], priceLowest + (levelAbovePoc + 1.00) * priceStep, xloc.bar_index, extend.none, vahColor, line.style_solid, 2))
-            pov_trimLineHistory(a_vahHist, povMaxVahValHistory)
-        if valueAreaLow and povMaxVahValHistory > 0
-            array.push(a_valHist, pov_drawOnlyLineX(bar_index[pvtLength] - profileLength, priceLowest + (levelBelowPoc + 0.00) * priceStep, bar_index[pvtLength], priceLowest + (levelBelowPoc + 0.00) * priceStep, xloc.bar_index, extend.none, valColor, line.style_solid, 2))
-            pov_trimLineHistory(a_valHist, povMaxVahValHistory)
-
-if enablePovProfile and pointOfControl and pocExtend != 'None'
-    pov_checkBreaches(a_poc, pocExtend)
-    pov_trimBoxHistory(a_poc, math.max(povMaxPocHistory, 0))
-
-var a_profileD = array.new_box()
-autoDevLength = last_bar_index - pov_x2 + pvtLength
-devLength = enablePovProfile and barstate.islast ? (povDevLookbackMode == 'Fixed' ? math.min(povDevLookbackBars, bar_index) : math.max(autoDevLength, 1)) : 1
-devHigh = ta.highest(high, math.max(devLength, 1) + 1)
-devLow = ta.lowest(low, math.max(devLength, 1) + 1)
-devStep = (devHigh - devLow) / profileLevels
-nzVolumePov = nz(volume)
-
-if enablePovProfile and barstate.islast and nzVolumePov > 0 and devLength > 0 and devStep > 0
-    if array.size(a_profileD) > 0
-        for i = 0 to array.size(a_profileD) - 1 by 1
-            box.delete(array.shift(a_profileD))
-    pov_fillVolumeProfile(devLength, 0, devLow, devStep, volumeStorageT)
-    pocLevel := array.indexof(volumeStorageT, array.max(volumeStorageT))
-    [levelAbove, levelBelow] = pov_calcValueArea(volumeStorageT, pocLevel)
-    levelAbovePoc := levelAbove
-    levelBelowPoc := levelBelow
-    pov_devPocPrice := devLow + (pocLevel + 0.5) * devStep
-    pov_devVahPrice := devLow + (levelAbovePoc + 1.00) * devStep
-    pov_devValPrice := devLow + (levelBelowPoc + 0.00) * devStep
-    if pointOfControl
-        array.push(a_profileD, box.new(bar_index - devLength, devLow + (pocLevel + .40) * devStep, bar_index, devLow + (pocLevel + .60) * devStep, pocColor, bgcolor = pocColor))
-    pov_drawLineX(bar_index - devLength, pov_devVahPrice, bar_index, pov_devVahPrice, xloc.bar_index, extend.none, valueAreaHigh ? vahColor : #00000000, line.style_solid, 2)
-    pov_drawLineX(bar_index - devLength, pov_devValPrice, bar_index, pov_devValPrice, xloc.bar_index, extend.none, valueAreaLow ? valColor : #00000000, line.style_solid, 2)
-
-//#endregion
 
 // ================================================================================================
 // بخش FVG: Fair Value Gap
@@ -2103,9 +1529,6 @@ fvgBearCss = input.color(color.new(#f23645, 70), 'Bearish FVG', group = 'Fair Va
 fvgShowDash = input.bool(false, 'Show Dashboard', group = 'Fair Value Gap')
 fvgDashLoc = input.string('Top Right', 'Dashboard Location', options = ['Top Right', 'Bottom Right', 'Bottom Left'], group = 'Fair Value Gap')
 fvgTextSize = input.string('Small', 'Dashboard Size', options = ['Tiny', 'Small', 'Normal'], group = 'Fair Value Gap')
-registerFvgAsTargets = input.bool(true, 'Register FVG as Targets', group = 'Fair Value Gap', tooltip = 'سطوح گپ‌های mitigate‌نشده را برای confluence ثبت می‌کند')
-fvgTargetWeight = input.float(120, 'Weight: FVG Target', minval = 0, group = 'Fair Value Gap')
-fvgMaxRegister = input.int(10, 'Max FVG Targets to Register', minval = 1, maxval = 50, group = 'Fair Value Gap')
 
 fvgToSolid(color id) =>
     color.rgb(color.r(id), color.g(id), color.b(id))
@@ -2265,94 +1688,69 @@ alertcondition(enableFvg and fvg_bear_count > fvg_bear_count[1], 'Bearish FVG', 
 alertcondition(enableFvg and fvg_bull_mitigated > fvg_bull_mitigated[1], 'Bullish FVG Mitigation', 'Bullish FVG mitigated')
 alertcondition(enableFvg and fvg_bear_mitigated > fvg_bear_mitigated[1], 'Bearish FVG Mitigation', 'Bearish FVG mitigated')
 
-// Keep fvg_records alias for target registration below
-var array<FvgGap> fvg_records = array.new<FvgGap>()
-if enableFvg and barstate.islast
-    fvg_records.clear()
-    if fvg_max_arr.size() > 0
-        for i = 0 to fvg_max_arr.size() - 1
-            fvg_records.push(FvgGap.new(fvg_max_arr.get(i), fvg_min_arr.get(i), fvg_bull_arr.get(i), time, fvg_born_arr.get(i)))
 
 //#endregion
 
 
 
 
-registerSessionTargetEx(float price, color col, float weight, bool isUp, string labelText, bool isToday) =>
-    if not na(price) and weight > 0 and canDrawLine() and canDrawLabel()
+registerSessionTargetEx(float price, color col, string labelText, int lineWidth) =>
+    if not na(price) and canDrawLine() and canDrawLabel()
         lnStyle = sessionTargetLineStyle == 'Solid' ? line.style_solid : sessionTargetLineStyle == 'Dashed' ? line.style_dashed : line.style_dotted
         f = chart.point.from_index(bar_index, price)
         s = chart.point.from_index(bar_index + targetLabelGapBars, price)
-        trackLine(line.new(f, s, color = color.new(col, sessionTargetLineTransparency), width = sessionTargetLineWidth, style = lnStyle))
+        trackLine(line.new(f, s, color = color.new(col, sessionTargetLineTransparency), width = lineWidth, style = lnStyle))
         midX = (bar_index + bar_index + targetLabelGapBars) / 2
         trackLabel(label.new(x = midX, y = price, text = labelText, style = label.style_label_center, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
-        if isToday
-            string sessionKey = "Session_" + labelText + "_" + str.tostring(price)
-            registerTarget(price, bar_index + targetLabelGapBars, col, weight, isUp, 1.0, bar_index, sessionKey)
 
 if bar_index == last_bar_index
     if enableSessionTargets
-        bool sesaActiveRecently = is_sesa[0] != 0 or (bar_index > 0 and is_sesa[1] != 0)
         if show_sesa and sesa_range
-            bool sesaIsTodayTarget = sesaActiveRecently
             if applySessionHigh
-                registerSessionTargetEx(curmax_sesa, sesa_css, sessionTargetWeightHigh, true, sesa_txt + " High", sesaIsTodayTarget)
+                registerSessionTargetEx(curmax_sesa, sesa_css, sesa_txt + " High", sessionHighLineWidth)
             if applySessionLow
-                registerSessionTargetEx(curmin_sesa, sesa_css, sessionTargetWeightLow, false, sesa_txt + " Low", sesaIsTodayTarget)
+                registerSessionTargetEx(curmin_sesa, sesa_css, sesa_txt + " Low", sessionLowLineWidth)
             if applySessionMid and not na(curmax_sesa) and not na(curmin_sesa)
                 midA = (curmax_sesa + curmin_sesa) / 2
-                registerSessionTargetEx(midA, sesa_css, sessionTargetWeightMid, true, sesa_txt + " Mid", sesaIsTodayTarget)
-
-        bool sesbActiveRecently = is_sesb[0] != 0 or (bar_index > 0 and is_sesb[1] != 0)
+                registerSessionTargetEx(midA, sesa_css, sesa_txt + " Mid", sessionMidLineWidth)
         if show_sesb and sesb_range
-            bool sesbIsTodayTarget = sesbActiveRecently
             if applySessionHigh
-                registerSessionTargetEx(curmax_sesb, sesb_css, sessionTargetWeightHigh, true, sesb_txt + " High", sesbIsTodayTarget)
+                registerSessionTargetEx(curmax_sesb, sesb_css, sesb_txt + " High", sessionHighLineWidth)
             if applySessionLow
-                registerSessionTargetEx(curmin_sesb, sesb_css, sessionTargetWeightLow, false, sesb_txt + " Low", sesbIsTodayTarget)
+                registerSessionTargetEx(curmin_sesb, sesb_css, sesb_txt + " Low", sessionLowLineWidth)
             if applySessionMid and not na(curmax_sesb) and not na(curmin_sesb)
                 midB = (curmax_sesb + curmin_sesb) / 2
-                registerSessionTargetEx(midB, sesb_css, sessionTargetWeightMid, true, sesb_txt + " Mid", sesbIsTodayTarget)
-
-        bool sescActiveRecently = is_sesc[0] != 0 or (bar_index > 0 and is_sesc[1] != 0)
+                registerSessionTargetEx(midB, sesb_css, sesb_txt + " Mid", sessionMidLineWidth)
         if show_sesc and sesc_range
-            bool sescIsTodayTarget = sescActiveRecently
             if applySessionHigh
-                registerSessionTargetEx(curmax_sesc, sesc_css, tokyoTargetWeightHigh, true, sesc_txt + " High", sescIsTodayTarget)
+                registerSessionTargetEx(curmax_sesc, sesc_css, sesc_txt + " High", sessionHighLineWidth)
             if applySessionLow
-                registerSessionTargetEx(curmin_sesc, sesc_css, tokyoTargetWeightLow, false, sesc_txt + " Low", sescIsTodayTarget)
+                registerSessionTargetEx(curmin_sesc, sesc_css, sesc_txt + " Low", sessionLowLineWidth)
             if applySessionMid and not na(curmax_sesc) and not na(curmin_sesc)
                 midC = (curmax_sesc + curmin_sesc) / 2
-                registerSessionTargetEx(midC, sesc_css, tokyoTargetWeightMid, true, sesc_txt + " Mid", sescIsTodayTarget)
-
-        bool sesdActiveRecently = is_sesd[0] != 0 or (bar_index > 0 and is_sesd[1] != 0)
+                registerSessionTargetEx(midC, sesc_css, sesc_txt + " Mid", sessionMidLineWidth)
         if show_sesd and sesd_range
-            bool sesdIsTodayTarget = sesdActiveRecently
             if applySessionHigh
-                registerSessionTargetEx(curmax_sesd, sesd_css, sessionTargetWeightHigh, true, sesd_txt + " High", sesdIsTodayTarget)
+                registerSessionTargetEx(curmax_sesd, sesd_css, sesd_txt + " High", sessionHighLineWidth)
             if applySessionLow
-                registerSessionTargetEx(curmin_sesd, sesd_css, sessionTargetWeightLow, false, sesd_txt + " Low", sesdIsTodayTarget)
+                registerSessionTargetEx(curmin_sesd, sesd_css, sesd_txt + " Low", sessionLowLineWidth)
             if applySessionMid and not na(curmax_sesd) and not na(curmin_sesd)
                 midD = (curmax_sesd + curmin_sesd) / 2
-                registerSessionTargetEx(midD, sesd_css, sessionTargetWeightMid, true, sesd_txt + " Mid", sesdIsTodayTarget)
+                registerSessionTargetEx(midD, sesd_css, sesd_txt + " Mid", sessionMidLineWidth)
 
-    if showDayOpenLine and not na(open_today_price) and dayOCWeight > 0
+    if showDayOpenLine and not na(open_today_price)
         f_open = chart.point.from_index(bar_index, open_today_price)
         s_open = chart.point.from_index(bar_index + targetLabelGapBars, open_today_price)
         trackLine(line.new(f_open, s_open, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = dayOcStyleFromString(openLineStyle)))
         midX = (bar_index + bar_index + targetLabelGapBars) / 2
         trackLabel(label.new(x = midX, y = open_today_price, text = "H Day Open", style = label.style_label_center, color = color.new(color.black, 100), textcolor = open_line_color, size = textSizeFromString(targetLabelSize)))
-        string openKey = "DayOpen_" + str.tostring(open_today_price)
-        registerTarget(open_today_price, bar_index + targetLabelGapBars, open_line_color, dayOCWeight, true, 1.0, bar_index, openKey)
 
-    if showDayCloseLine and not na(close_yesterday_price) and dayOCWeight > 0
+    if showDayCloseLine and not na(close_yesterday_price)
         f_close = chart.point.from_index(bar_index, close_yesterday_price)
         s_close = chart.point.from_index(bar_index + targetLabelGapBars, close_yesterday_price)
         trackLine(line.new(f_close, s_close, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = dayOcStyleFromString(closeLineStyle)))
         midX = (bar_index + bar_index + targetLabelGapBars) / 2
         trackLabel(label.new(x = midX, y = close_yesterday_price, text = "L Day Close", style = label.style_label_center, color = color.new(color.black, 100), textcolor = close_line_color, size = textSizeFromString(targetLabelSize)))
-        string closeKey = "DayClose_" + str.tostring(close_yesterday_price)
-        registerTarget(close_yesterday_price, bar_index + targetLabelGapBars, close_line_color, dayOCWeight, false, 1.0, bar_index, closeKey)
 
     if showDayOCBox and not na(open_today_price) and not na(close_yesterday_price)
         boxTop = math.max(open_today_price, close_yesterday_price)
@@ -2362,90 +1760,7 @@ if bar_index == last_bar_index
         ocLbl = label.new(x = getStaggerX(boxTop, bar_index + targetLabelGapBars), y = boxTop, text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
         trackLabel(ocLbl)
 
-    if enablePovProfile and registerPovAsTargets
-        if pointOfControl and not na(pov_devPocPrice) and pocTargetWeight > 0
-            f_poc = chart.point.from_index(bar_index, pov_devPocPrice)
-            s_poc = chart.point.from_index(bar_index + targetLabelGapBars, pov_devPocPrice)
-            trackLine(line.new(f_poc, s_poc, color = color.new(pocColor, targetLineTransparency), width = 2, style = line.style_solid))
-            trackLabel(label.new(x = bar_index + int(targetLabelGapBars / 2), y = pov_devPocPrice, text = "PoC", style = label.style_label_center, color = color.new(color.black, 100), textcolor = pocColor, size = textSizeFromString(targetLabelSize)))
-            registerTarget(pov_devPocPrice, bar_index + targetLabelGapBars, pocColor, pocTargetWeight, close < pov_devPocPrice, 1.0, bar_index, "POV_PoC_" + str.tostring(pov_devPocPrice))
-        if valueAreaHigh and not na(pov_devVahPrice) and vahTargetWeight > 0
-            f_vah = chart.point.from_index(bar_index, pov_devVahPrice)
-            s_vah = chart.point.from_index(bar_index + targetLabelGapBars, pov_devVahPrice)
-            trackLine(line.new(f_vah, s_vah, color = color.new(vahColor, targetLineTransparency), width = 1, style = line.style_dashed))
-            trackLabel(label.new(x = bar_index + int(targetLabelGapBars / 2), y = pov_devVahPrice, text = "VAH", style = label.style_label_center, color = color.new(color.black, 100), textcolor = vahColor, size = textSizeFromString(targetLabelSize)))
-            registerTarget(pov_devVahPrice, bar_index + targetLabelGapBars, vahColor, vahTargetWeight, true, 1.0, bar_index, "POV_VAH_" + str.tostring(pov_devVahPrice))
-        if valueAreaLow and not na(pov_devValPrice) and valTargetWeight > 0
-            f_val = chart.point.from_index(bar_index, pov_devValPrice)
-            s_val = chart.point.from_index(bar_index + targetLabelGapBars, pov_devValPrice)
-            trackLine(line.new(f_val, s_val, color = color.new(valColor, targetLineTransparency), width = 1, style = line.style_dashed))
-            trackLabel(label.new(x = bar_index + int(targetLabelGapBars / 2), y = pov_devValPrice, text = "VAL", style = label.style_label_center, color = color.new(color.black, 100), textcolor = valColor, size = textSizeFromString(targetLabelSize)))
-            registerTarget(pov_devValPrice, bar_index + targetLabelGapBars, valColor, valTargetWeight, false, 1.0, bar_index, "POV_VAL_" + str.tostring(pov_devValPrice))
 
-    if enableFvg and registerFvgAsTargets and fvgTargetWeight > 0 and fvg_records.size() > 0
-        int fvgRegCount = math.min(fvgMaxRegister, fvg_records.size())
-        for i = 0 to fvgRegCount - 1
-            FvgGap g = fvg_records.get(i)
-            if not na(g.min) and not na(g.max)
-                float lvl = g.isbull ? g.min : g.max
-                color fvgCol = g.isbull ? fvgBullCss : fvgBearCss
-                string fvgLbl = g.isbull ? "FVG Bull" : "FVG Bear"
-                if canDrawLine() and canDrawLabel()
-                    f_fvg = chart.point.from_index(bar_index, lvl)
-                    s_fvg = chart.point.from_index(bar_index + targetLabelGapBars, lvl)
-                    trackLine(line.new(f_fvg, s_fvg, color = color.new(fvgCol, targetLineTransparency), width = 1, style = line.style_dotted))
-                    trackLabel(label.new(x = bar_index + int(targetLabelGapBars / 2), y = lvl, text = fvgLbl, style = label.style_label_center, color = color.new(color.black, 100), textcolor = fvgToSolid(fvgCol), size = textSizeFromString(targetLabelSize)))
-                registerTarget(lvl, bar_index + targetLabelGapBars, fvgToSolid(fvgCol), fvgTargetWeight, g.isbull, 1.0, bar_index, "FVG_" + fvgLbl + "_" + str.tostring(lvl))
 
-    if enableConfluenceZones
-        drawConfluenceZones(confluenceTolerancePct, computedZoneMaxWidth, confluenceMinTargets, confluenceTopZonesCount, confluenceZoneLength, confluenceZoneColor, confluenceTopBgColor, startPointInput, confluenceLabelOffsetBars, confluenceLabelSizeTop, confluenceLabelSizeOther)
-
-    drawCloseTargetCircles()
-    fillDensityTrendTable()
-
-    if showScoreTable
-        string direction = close > open ? "▲ BULL" : close < open ? "▼ BEAR" : "— FLAT"
-        color dirColor   = close > open ? color.lime : close < open ? color.red : color.gray
-
-        int totalTargets = g_targetPrices.size()
-
-        float bestUpScore   = 0.0
-        float bestDownScore = 0.0
-        if totalTargets > 1
-            for i = 0 to totalTargets - 1
-                if g_targetTrend.get(i)
-                    bestUpScore   := math.max(bestUpScore, g_targetWeights.get(i))
-                else
-                    bestDownScore := math.max(bestDownScore, g_targetWeights.get(i))
-
-        float highestUp   = 0.0
-        float lowestDown   = 999999999.0
-        for i = 0 to totalTargets - 1
-            float p = g_targetPrices.get(i)
-            if g_targetTrend.get(i)
-                highestUp := math.max(highestUp, p)
-            else
-                lowestDown := math.min(lowestDown, p)
-
-        table.cell(scoreTable, column = 0, row = 0, text = "Score", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 0, text = "—", text_color = color.gray, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-
-        table.cell(scoreTable, column = 0, row = 1, text = "Direction", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 1, text = direction, text_color = dirColor, text_size = size.small, text_halign = text.align_right, text_valign = text.align_center, bgcolor = color.new(dirColor, 20))
-
-        table.cell(scoreTable, column = 0, row = 2, text = "Targets", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 2, text = str.tostring(totalTargets), text_color = color.aqua, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-
-        table.cell(scoreTable, column = 0, row = 3, text = "▲ Best", text_color = color.lime, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 3, text = bestUpScore > 0 ? str.tostring(bestUpScore, "#") : "—", text_color = color.lime, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.lime, 85))
-
-        table.cell(scoreTable, column = 0, row = 4, text = "▼ Best", text_color = color.red, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 4, text = bestDownScore > 0 ? str.tostring(bestDownScore, "#") : "—", text_color = color.red, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.red, 85))
-
-        table.cell(scoreTable, column = 0, row = 5, text = "▲ High", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 5, text = highestUp > 0 ? str.tostring(highestUp, "#.##") : "—", text_color = color.white, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
-
-        table.cell(scoreTable, column = 0, row = 6, text = "▼ Low", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(color.black, 0))
-        table.cell(scoreTable, column = 1, row = 6, text = lowestDown < 999999999.0 ? str.tostring(lowestDown, "#.##") : "—", text_color = color.white, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(color.black, 0))
 
 //#endregion

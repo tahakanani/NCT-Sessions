@@ -21,9 +21,7 @@ namespace cAlgo.Indicators
         [Parameter("Calc Nodes with Symmetry", DefaultValue = true, Group = "Strategy Config")]
         public bool SwCalcSymmetry { get; set; }
 
-        // Logarithm is always ON for node calc + targets (requested).
-        // Kept for compatibility; value is ignored at runtime.
-        [Parameter("Calc Nodes with Logarithm (Always On)", DefaultValue = true, Group = "Strategy Config")]
+        [Parameter("Calc Nodes with Logarithm", DefaultValue = true, Group = "Strategy Config")]
         public bool SwCalcLogarithm { get; set; }
 
         [Parameter("Show Regular Nodes", DefaultValue = true, Group = "Strategy Config")]
@@ -86,6 +84,12 @@ namespace cAlgo.Indicators
 
         [Parameter("Show Double (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble { get; set; }
+
+        [Parameter("Show Double 0.86 (Single)", DefaultValue = true, Group = "Node Targets")]
+        public bool ShowDouble086 { get; set; }
+
+        [Parameter("Start→Double Ratio", DefaultValue = 0.86, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
+        public double Double086Ratio { get; set; }
 
         [Parameter("Show Min (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin { get; set; }
@@ -219,6 +223,10 @@ namespace cAlgo.Indicators
         private int _objSeq;
         private string _lastDrawSignature;
         private int _lastDrawBarIndex = -1;
+        private double _lastLiveHigh = double.NaN;
+        private double _lastLiveLow = double.NaN;
+        private double _lastLiveClose = double.NaN;
+        private bool _lastLiveBull;
 
         private double _priceLowestUp = 999999.0;
         private int _indexLowestUp;
@@ -259,8 +267,6 @@ namespace cAlgo.Indicators
             {
                 if (Bars == null || Bars.Count < 3)
                     return;
-                if (_lastDrawBarIndex == Bars.Count - 1)
-                    return;
                 RebuildAndDraw();
             }
             catch { }
@@ -299,8 +305,16 @@ namespace cAlgo.Indicators
                 if (lastIndex < 2)
                     return;
 
-                // Same bar already drawn — skip. New custom bars change Count and rebuild.
-                if (_lastDrawBarIndex == lastIndex && _lastDrawSignature != null)
+                double liveHigh = Bars.HighPrices[lastIndex];
+                double liveLow = Bars.LowPrices[lastIndex];
+                double liveClose = Bars.ClosePrices[lastIndex];
+                bool liveBull = liveClose >= Bars.OpenPrices[lastIndex];
+                // Skip only when this bar has not moved in a way that can change nodes or hits.
+                if (_lastDrawBarIndex == lastIndex
+                    && _lastDrawSignature != null
+                    && _lastLiveHigh == liveHigh
+                    && _lastLiveLow == liveLow
+                    && _lastLiveBull == liveBull)
                     return;
 
                 string savedSig = _lastDrawSignature;
@@ -328,6 +342,10 @@ namespace cAlgo.Indicators
                 {
                     _lastDrawSignature = savedSig;
                     _lastDrawBarIndex = savedBar;
+                    _lastLiveHigh = liveHigh;
+                    _lastLiveLow = liveLow;
+                    _lastLiveClose = liveClose;
+                    _lastLiveBull = liveBull;
                     return;
                 }
 
@@ -379,6 +397,10 @@ namespace cAlgo.Indicators
 
                 _lastDrawSignature = signature;
                 _lastDrawBarIndex = lastIndex;
+                _lastLiveHigh = liveHigh;
+                _lastLiveLow = liveLow;
+                _lastLiveClose = liveClose;
+                _lastLiveBull = liveBull;
             }
             finally
             {
@@ -399,8 +421,8 @@ namespace cAlgo.Indicators
             _objSeq = 0;
             _redDensityCount = 0;
             _yellowDensityCount = 0;
-            _lastDrawSignature = null;
-            _lastDrawBarIndex = -1;
+            // Keep draw-cache (_lastDrawSignature / bar index / live OHLC) so a mid-rebuild
+            // return does not force a full redraw on the next tick.
 
             _priceLowestUp = 999999.0;
             _indexLowestUp = 0;
@@ -566,6 +588,29 @@ namespace cAlgo.Indicators
         private static double SafeLog(double value)
         {
             return value > 0 ? Math.Log(value) : 0.0;
+        }
+
+        private double AbsMove(double from, double to)
+        {
+            if (SwCalcLogarithm)
+                return Math.Abs(SafeLog(to) - SafeLog(from));
+            return Math.Abs(to - from);
+        }
+
+        private double Project(double origin, double move, bool isUp)
+        {
+            if (SwCalcLogarithm)
+                return isUp
+                    ? Math.Exp(SafeLog(origin) + move)
+                    : Math.Exp(SafeLog(origin) - move);
+            return isUp ? origin + move : origin - move;
+        }
+
+        private double AlongPath(double start, double end, double ratio)
+        {
+            if (SwCalcLogarithm)
+                return Math.Exp(SafeLog(start) + ratio * (SafeLog(end) - SafeLog(start)));
+            return start + ratio * (end - start);
         }
 
         // ───────────────────────── Symmetry ─────────────────────────
@@ -1090,14 +1135,18 @@ namespace cAlgo.Indicators
 
         private void SortUp()
         {
-            // Always logarithmic (targets + nodal calc must stay log-based)
-            SortNodesUpTrendModeLog();
+            if (SwCalcLogarithm)
+                SortNodesUpTrendModeLog();
+            else
+                SortNodesUpTrend();
         }
 
         private void SortDown()
         {
-            // Always logarithmic (targets + nodal calc must stay log-based)
-            SortNodesDownTrendModeLog();
+            if (SwCalcLogarithm)
+                SortNodesDownTrendModeLog();
+            else
+                SortNodesDownTrend();
         }
 
         // ───────────────────────── Set / Calc Nodes ─────────────────────────
@@ -1353,10 +1402,15 @@ namespace cAlgo.Indicators
             // Compact fingerprint of drawable state — skip redraw when unchanged on same bar.
             var sb = new System.Text.StringBuilder(256);
             sb.Append(lastIndex).Append('|')
+              .Append(Bars.HighPrices[lastIndex].ToString("R")).Append('|')
+              .Append(Bars.LowPrices[lastIndex].ToString("R")).Append('|')
               .Append(_nodesUp.Count).Append('|')
               .Append(_nodesDown.Count).Append('|')
               .Append(ShowTargetUp).Append('|')
               .Append(ShowTargetDown).Append('|')
+              .Append(ShowDouble).Append('|')
+              .Append(ShowDouble086).Append('|')
+              .Append(Double086Ratio.ToString("R")).Append('|')
               .Append(EnableSingleNode1Targets).Append('|')
               .Append(EnablePairNode12Targets).Append('|')
               .Append(TargetMaxCount).Append('|')
@@ -1365,9 +1419,15 @@ namespace cAlgo.Indicators
               .Append(TextNodeSize).Append('|')
               .Append(TargetGapBars).Append('|')
               .Append(DeleteHitTargets).Append('|')
+              .Append(HitGraceBars).Append('|')
               .Append(EnableDensity).Append('|')
               .Append(ShowDayOpenTarget).Append('|')
               .Append(ShowDayCloseTarget).Append('|')
+              .Append(SwCalcLogarithm).Append('|')
+              .Append(SwCalcSymmetry).Append('|')
+              .Append(ShowStarSuffix).Append('|')
+              .Append(ShowRegularNodes).Append('|')
+              .Append(ShowDoubleStarNodes).Append('|')
               .Append(ShowAsiaSession).Append('|')
               .Append(AsiaDisplayDays).Append('|')
               .Append(AsiaStartHour).Append('|')
@@ -1488,13 +1548,15 @@ namespace cAlgo.Indicators
             for (int i = 0; i < nodes.Count; i++)
             {
                 var node = nodes[i];
-                bool shouldDraw = node.IsSymmetrySetup ? ShowDoubleStarNodes : ShowRegularNodes;
+                bool shouldDraw = SwCalcSymmetry
+                    ? (node.IsSymmetrySetup ? ShowDoubleStarNodes : ShowRegularNodes)
+                    : (ShowRegularNodes || ShowDoubleStarNodes);
                 if (shouldDraw)
                 {
                     int barIdx = ClampIndex(node.IndexNode);
                     Color textColor = ColorAt(indexColor);
 
-                    string newText = (node.IsSymmetrySetup || ShowStarSuffix)
+                    string newText = SwCalcSymmetry
                         ? node.NumberNode + "*"
                         : node.NumberNode.ToString();
 
@@ -1534,19 +1596,17 @@ namespace cAlgo.Indicators
             }
         }
 
-        private static bool IsIncompleteNode2(List<Node> nodes, int i, bool swUptrendType)
+        private bool IsIncompleteNode2(List<Node> nodes, int i, bool swUptrendType)
         {
             if (i <= 0 || nodes[i].NumberNode != 2 || nodes[i - 1].NumberNode != 1)
                 return false;
 
             var n1 = nodes[i - 1];
             var n2 = nodes[i];
-            double moveSizeLog = Math.Abs(SafeLog(n1.HighNode) - SafeLog(n1.LowPreNode));
-            double minPrice = swUptrendType
-                ? Math.Exp(SafeLog(n1.LowCorrection) + moveSizeLog)
-                : Math.Exp(SafeLog(n1.LowCorrection) - moveSizeLog);
+            double move = AbsMove(n1.LowPreNode, n1.HighNode);
+            double minPrice = Project(n1.LowCorrection, move, swUptrendType);
 
-            if (double.IsNaN(minPrice) || double.IsInfinity(minPrice) || minPrice <= 0)
+            if (double.IsNaN(minPrice) || double.IsInfinity(minPrice))
                 return false;
 
             return swUptrendType
@@ -1648,15 +1708,13 @@ namespace cAlgo.Indicators
                 Color lineColor = WithTransparency(colorByNode[i]);
                 Color labelColor = colorByNode[i];
 
-                double moveSizeLog = Math.Abs(SafeLog(node.HighNode) - SafeLog(node.LowPreNode));
-                double correctionSizeLog = Math.Abs(SafeLog(node.HighNode) - SafeLog(node.LowCorrection));
+                double moveSize = AbsMove(node.LowPreNode, node.HighNode);
+                double correctionSize = AbsMove(node.LowCorrection, node.HighNode);
                 DateTime startTime = TimeAtIndex(node.IndexNode);
 
                 if (ShowDouble)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node.HighNode) + moveSizeLog)
-                        : Math.Exp(SafeLog(node.HighNode) - moveSizeLog);
+                    double price = Project(node.HighNode, moveSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
@@ -1666,11 +1724,27 @@ namespace cAlgo.Indicators
                     }
                 }
 
+                if (ShowDouble086)
+                {
+                    // Keep D 0.86 until this node 1 gets its own following node 2.
+                    bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
+                    if (!hasRelatedNode2)
+                    {
+                        double doublePrice = Project(node.HighNode, moveSize, swUptrendType);
+                        double price = AlongPath(node.LowPreNode, doublePrice, Double086Ratio);
+
+                        if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
+                        {
+                            DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
+                                trendPrefix + "D " + Double086Ratio.ToString("0.##"), labelColor);
+                            RegisterDensity(price, swUptrendType, endTime);
+                        }
+                    }
+                }
+
                 if (ShowMin)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node.LowCorrection) + moveSizeLog)
-                        : Math.Exp(SafeLog(node.LowCorrection) - moveSizeLog);
+                    double price = Project(node.LowCorrection, moveSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
                     {
@@ -1682,9 +1756,7 @@ namespace cAlgo.Indicators
 
                 if (ShowCorrection)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node.HighNode) + correctionSizeLog)
-                        : Math.Exp(SafeLog(node.HighNode) - correctionSizeLog);
+                    double price = Project(node.HighNode, correctionSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
@@ -1737,13 +1809,11 @@ namespace cAlgo.Indicators
                 Color lineColor = WithTransparency(colorByNode[i]);
                 Color labelColor = colorByNode[i];
 
-                double totalMoveLog = Math.Abs(SafeLog(node2.HighNode) - SafeLog(node1.LowPreNode));
+                double totalMove = AbsMove(node1.LowPreNode, node2.HighNode);
 
                 if (ShowPairMin)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node1.LowCorrection) + totalMoveLog)
-                        : Math.Exp(SafeLog(node1.LowCorrection) - totalMoveLog);
+                    double price = Project(node1.LowCorrection, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node1.IndexCorrection, swUptrendType))
                     {
@@ -1755,9 +1825,7 @@ namespace cAlgo.Indicators
 
                 if (ShowPairMax)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node2.LowCorrection) + totalMoveLog)
-                        : Math.Exp(SafeLog(node2.LowCorrection) - totalMoveLog);
+                    double price = Project(node2.LowCorrection, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexCorrection, swUptrendType))
                     {
@@ -1769,9 +1837,7 @@ namespace cAlgo.Indicators
 
                 if (ShowPairDouble)
                 {
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node2.HighNode) + totalMoveLog)
-                        : Math.Exp(SafeLog(node2.HighNode) - totalMoveLog);
+                    double price = Project(node2.HighNode, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
                     {
@@ -1783,10 +1849,8 @@ namespace cAlgo.Indicators
 
                 if (ShowPairCorrection)
                 {
-                    double correctionSizeLog2 = Math.Abs(SafeLog(node2.HighNode) - SafeLog(node2.LowCorrection));
-                    double price = swUptrendType
-                        ? Math.Exp(SafeLog(node2.HighNode) + correctionSizeLog2)
-                        : Math.Exp(SafeLog(node2.HighNode) - correctionSizeLog2);
+                    double correctionSize2 = AbsMove(node2.LowCorrection, node2.HighNode);
+                    double price = Project(node2.HighNode, correctionSize2, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
                     {
