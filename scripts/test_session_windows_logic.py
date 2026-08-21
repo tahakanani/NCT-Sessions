@@ -202,8 +202,8 @@ def test_same_day_and_asia_style_wrap() -> None:
 
 
 def test_time_points_panel_and_grades() -> None:
-    points = parse_time_points("03:00, 04:00, 08:00, 09:00, 10:00, 16:30, 18:00, 20:00, 23:00")
-    assert_eq(points, [180, 240, 480, 540, 600, 990, 1080, 1200, 1380], "default TP list")
+    points = parse_time_points("03:00, 04:00, 08:00, 09:00, 10:00, 13:00, 15:30, 16:30, 18:00, 20:00, 21:00, 23:00")
+    assert_eq(points, [180, 240, 480, 540, 600, 780, 930, 990, 1080, 1200, 1260, 1380], "default TP list")
     assert_eq(parse_time_points("10:00, 10:00, bad, 09:00"), [540, 600], "dedupe + skip bad")
 
     # 16:00 with shift -30: next TP 16:30 becomes 16:00 chart time...
@@ -259,7 +259,7 @@ def test_source_defaults() -> None:
         'DefaultValue = 2',
         'DefaultValue = "Edge lines only"',
         'DefaultValue = "SWP_"',
-        "03:00, 04:00, 08:00, 09:00, 10:00, 16:30, 18:00, 20:00, 23:00",
+        "03:00, 04:00, 08:00, 09:00, 10:00, 13:00, 15:30, 16:30, 18:00, 20:00, 21:00, 23:00",
         "public static class SessionWindowsLogic",
         "ShiftWrap",
         "IsInWindow",
