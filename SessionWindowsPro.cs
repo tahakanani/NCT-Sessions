@@ -10,9 +10,11 @@ using cAlgo.API.Internals;
 
 namespace cAlgo.Indicators
 {
-    [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
+    [Indicator(IsOverlay = true, TimeZone = TimeZones.IranStandardTime, AccessRights = AccessRights.None)]
     public class SessionWindowsPro : Indicator
     {
+        // Times are broker GMT+3:30 (Iran Standard Time). Keep Shift at 0
+        // so 03:00 on the chart is 03:00 in the inputs.
         // ───────────────────────── General ─────────────────────────
 
         [Parameter("Teaching view", DefaultValue = "Full map (all 11)", Group = "General")]
@@ -21,7 +23,7 @@ namespace cAlgo.Indicators
         [Parameter("Days back to draw", DefaultValue = 2, MinValue = 1, MaxValue = 30, Group = "General")]
         public int DaysBack { get; set; }
 
-        [Parameter("Shift all times (minutes, +/-)", DefaultValue = -30, MinValue = -720, MaxValue = 720, Group = "General")]
+        [Parameter("Shift all times (minutes, +/-)", DefaultValue = 0, MinValue = -720, MaxValue = 720, Group = "General")]
         public int ShiftMinutes { get; set; }
 
         [Parameter("Hide windows with no bars (weekends)", DefaultValue = true, Group = "General")]

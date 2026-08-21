@@ -161,6 +161,9 @@ def test_parse_and_shift() -> None:
     assert_eq(shift_wrap(10, -30), 1420, "00:10 shift -30 wraps")
     assert_eq(shift_wrap(0, -30), 1410, "00:00 shift -30 -> 23:30")
     assert_eq(shift_wrap(1380, -30), 1350, "23:00 shift -30 -> 22:30")
+    assert_eq(shift_wrap(180, 0), 180, "03:00 broker GMT+3:30 stays 03:00")
+    assert_eq(is_in_window(180, 60, 150, 0), False, "03:00 not in W01 01:00-02:30")
+    assert_eq(is_in_window(60, 60, 150, 0), True, "01:00 inside W01 with shift 0")
 
 
 def test_window_11_wrap() -> None:
@@ -255,7 +258,8 @@ def test_source_defaults() -> None:
             raise AssertionError(f"W{index} colour {colour} missing")
 
     required = [
-        'DefaultValue = -30',
+        'DefaultValue = 0, MinValue = -720, MaxValue = 720, Group = "General"',
+        "TimeZones.IranStandardTime",
         'DefaultValue = 2',
         'DefaultValue = "Edge lines only"',
         'DefaultValue = "SWP_"',
