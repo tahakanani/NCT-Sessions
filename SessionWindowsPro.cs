@@ -63,7 +63,7 @@ namespace cAlgo.Indicators
         [Parameter("Label colour (when not per-zone)", DefaultValue = "170,175,185", Group = "Labels")]
         public string LabelColourName { get; set; }
 
-        [Parameter("Label font size", DefaultValue = 8, MinValue = 6, MaxValue = 24, Group = "Labels")]
+        [Parameter("Label font size", DefaultValue = 11, MinValue = 6, MaxValue = 24, Group = "Labels")]
         public int LabelFontSize { get; set; }
 
         [Parameter("Colour label like its zone", DefaultValue = true, Group = "Labels")]
@@ -544,7 +544,7 @@ namespace cAlgo.Indicators
             LineStyle dsStyle = ParseLineStyle(DayStartStyleName, LineStyle.Dots);
             int tpWidth = Math.Max(1, Math.Min(5, TimePointWidth));
             int dsWidth = Math.Max(1, Math.Min(5, DayStartWidth));
-            int tagSize = Math.Max(6, Math.Min(24, LabelFontSize));
+            int tagSize = Math.Max(10, Math.Min(24, LabelFontSize));
 
             if (ShowDayStartLine)
             {
@@ -555,10 +555,7 @@ namespace cAlgo.Indicators
                     if (ShowDayStartTag)
                     {
                         string tag = SessionWindowsLogic.FormatHhMm(SessionWindowsLogic.ShiftWrap(0, ShiftMinutes));
-                        var txt = Chart.DrawText(NextName("DSTag"), tag, midnight, top, dsColor);
-                        txt.FontSize = tagSize;
-                        txt.HorizontalAlignment = HorizontalAlignment.Center;
-                        txt.VerticalAlignment = VerticalAlignment.Top;
+                        DrawBottomTimeTag(NextName("DSTag"), tag, midnight, top, bottom, dsColor, tagSize);
                     }
                 }
             }
@@ -573,12 +570,23 @@ namespace cAlgo.Indicators
                 if (ShowTimePointTags)
                 {
                     string tag = SessionWindowsLogic.FormatHhMm(SessionWindowsLogic.ShiftWrap(timePoints[i], ShiftMinutes));
-                    var txt = Chart.DrawText(NextName("TPTag"), tag, when, top, tpColor);
-                    txt.FontSize = tagSize;
-                    txt.HorizontalAlignment = HorizontalAlignment.Center;
-                    txt.VerticalAlignment = VerticalAlignment.Top;
+                    DrawBottomTimeTag(NextName("TPTag"), tag, when, top, bottom, tpColor, tagSize);
                 }
             }
+        }
+
+        private void DrawBottomTimeTag(string name, string tag, DateTime when, double top, double bottom, Color color, int fontSize)
+        {
+            double span = top - bottom;
+            if (span <= 0 || string.IsNullOrWhiteSpace(tag))
+                return;
+
+            // Sit the HH:MM just above the chart floor so it is not clipped off the top.
+            double price = bottom + span * 0.03;
+            var txt = Chart.DrawText(name, tag, when, price, color);
+            txt.FontSize = fontSize;
+            txt.HorizontalAlignment = HorizontalAlignment.Center;
+            txt.VerticalAlignment = VerticalAlignment.Bottom;
         }
 
         private void DrawLivePanel(WindowDef[] windows, int[] timePoints)
