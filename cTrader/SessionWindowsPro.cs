@@ -1,6 +1,6 @@
 // SessionWindowsPro — cTrader Automate
 // Port of MetaTrader SessionWindowsPro 1.21: 11 graded time windows,
-// time-point lines, day-start line, and a live countdown panel.
+// time-point lines, and a day-start line. No on-chart info panel by default.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -114,7 +114,7 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Live panel ─────────────────────────
 
-        [Parameter("Show current-window / countdown panel", DefaultValue = true, Group = "Live Panel")]
+        [Parameter("Show info panel", DefaultValue = false, Group = "Live Panel")]
         public bool ShowLivePanel { get; set; }
 
         [Parameter("Corner (0=TL 1=TR 2=BL 3=BR)", DefaultValue = 2, MinValue = 0, MaxValue = 3, Group = "Live Panel")]
