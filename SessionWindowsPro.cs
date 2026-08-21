@@ -470,13 +470,8 @@ namespace cAlgo.Indicators
                     SessionWindowsLogic.WindowOnDay(day, window.StartMinutes, window.EndMinutes, ShiftMinutes,
                         out startTime, out endTime);
 
-                    int firstBar;
-                    int lastBar;
-                    if (!FindBarsInRange(startTime, endTime, out firstBar, out lastBar))
-                    {
-                        if (HideEmptyWindows)
-                            continue;
-                    }
+                    if (HideEmptyWindows && !HasBarsInRange(startTime, endTime))
+                        continue;
 
                     int r, g, b;
                     if (!SessionWindowsLogic.TryParseRgb(window.ColourName, out r, out g, out b))
@@ -674,10 +669,8 @@ namespace cAlgo.Indicators
             return false;
         }
 
-        private bool FindBarsInRange(DateTime startTime, DateTime endTime, out int firstBar, out int lastBar)
+        private bool HasBarsInRange(DateTime startTime, DateTime endTime)
         {
-            firstBar = -1;
-            lastBar = -1;
             if (Bars == null || Bars.Count == 0)
                 return false;
 
@@ -688,12 +681,10 @@ namespace cAlgo.Indicators
                     continue;
                 if (t >= endTime)
                     break;
-                if (firstBar < 0)
-                    firstBar = i;
-                lastBar = i;
+                return true;
             }
 
-            return firstBar >= 0;
+            return false;
         }
 
         private void GetChartBounds(int lastIndex, out double top, out double bottom)
