@@ -117,7 +117,7 @@ namespace cAlgo.Indicators
         [Parameter("Show current-window / countdown panel", DefaultValue = true, Group = "Live Panel")]
         public bool ShowLivePanel { get; set; }
 
-        [Parameter("Corner (0=TL 1=TR 2=BL 3=BR)", DefaultValue = 1, MinValue = 0, MaxValue = 3, Group = "Live Panel")]
+        [Parameter("Corner (0=TL 1=TR 2=BL 3=BR)", DefaultValue = 2, MinValue = 0, MaxValue = 3, Group = "Live Panel")]
         public int PanelCorner { get; set; }
 
         [Parameter("X offset (px)", DefaultValue = 12, MinValue = 0, MaxValue = 200, Group = "Live Panel")]
@@ -614,10 +614,18 @@ namespace cAlgo.Indicators
 
             var sb = new StringBuilder();
             int yPad = Math.Max(0, PanelYOffset / 14);
-            for (int i = 0; i < yPad; i++)
-                sb.Append('\n');
             int xPad = Math.Max(0, PanelXOffset / 8);
             string indent = xPad > 0 ? new string(' ', xPad) : "";
+
+            VerticalAlignment vAlign;
+            HorizontalAlignment hAlign;
+            CornerAlign(PanelCorner, out vAlign, out hAlign);
+            bool padTop = vAlign == VerticalAlignment.Top;
+            if (padTop)
+            {
+                for (int i = 0; i < yPad; i++)
+                    sb.Append('\n');
+            }
 
             if (current != null)
             {
@@ -645,9 +653,12 @@ namespace cAlgo.Indicators
                 sb.Append(indent).Append("next TP  —");
             }
 
-            VerticalAlignment vAlign;
-            HorizontalAlignment hAlign;
-            CornerAlign(PanelCorner, out vAlign, out hAlign);
+            if (!padTop)
+            {
+                for (int i = 0; i < yPad; i++)
+                    sb.Append('\n');
+            }
+
             Color panelColor = warn
                 ? Color.FromArgb(255, 255, 196, 72)
                 : Color.FromArgb(255, 230, 232, 238);
