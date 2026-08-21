@@ -1,0 +1,3 @@
+{
+  "install": "bash scripts/install-cursor-rtl.sh"
+}

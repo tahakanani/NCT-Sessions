@@ -17,10 +17,12 @@
 3. روی **Install** کلیک کنید.
 
 **روش جایگزین (VSIX):**
-1. فایل را دانلود کنید:  
-   https://github.com/motcke/cursor-ext-rtl/releases/download/v1.2.4/cursor-rtl.vsix
-2. `Ctrl+Shift+P` → **Extensions: Install from VSIX...**
-3. فایل دانلودشده را انتخاب کنید.
+1. فایل داخل همین مخزن:
+   `scripts/cursor-rtl.vsix`
+2. `Ctrl+Shift+P`
+3. دستور:
+   `Extensions: Install from VSIX...`
+4. همان فایل را انتخاب کنید.
 
 ---
 
