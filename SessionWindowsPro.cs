@@ -80,7 +80,7 @@ namespace cAlgo.Indicators
         [Parameter("Show time-point lines", DefaultValue = true, Group = "Time Points")]
         public bool ShowTimePointLines { get; set; }
 
-        [Parameter("Time points (HH:MM, comma separated)", DefaultValue = "03:00, 04:00, 08:00, 09:00, 10:00, 13:00, 15:30, 16:30, 18:00, 20:00, 21:00, 23:00", Group = "Time Points")]
+        [Parameter("Time points (HH:MM, comma separated)", DefaultValue = "01:30, 02:30, 03:00, 04:00, 07:00, 08:00, 09:00, 10:00, 12:00, 13:00, 15:30, 16:30, 18:00, 20:00, 21:00, 23:00", Group = "Time Points")]
         public string TimePointsList { get; set; }
 
         [Parameter("Time-point line colour", DefaultValue = "232,200,110", Group = "Time Points")]
