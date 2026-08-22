@@ -530,26 +530,29 @@ var g_stagLabelX     = array.new<int>()
 
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 var GRP_LBL = "Target Label Anti-Overlap"
-targetLabelPriceTolerancePct = input.float(0.05, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 5, step = 0.001, group = GRP_LBL, tooltip = 'اگر دو لیبل از نظر قیمتی به این درصد یا کمتر نزدیک باشند، تداخل تشخیص داده شده و یکی جلوتر قرار می‌گیرد')
-targetLabelStaggerStep = input.int(18, 'Label Stagger Step (bars)', minval = 2, maxval = 200, group = GRP_LBL, tooltip = 'فاصله جلو‌رفتن هر لیبل متداخل بر حسب تعداد کندل')
+targetLabelPriceTolerancePct = input.float(0.25, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 5, step = 0.001, group = GRP_LBL, tooltip = 'اگر دو لیبل از نظر قیمتی به این درصد یا کمتر نزدیک باشند، تداخل تشخیص داده شده و یکی به راست جابه‌جا می‌شود')
+targetLabelStaggerStep = input.int(28, 'Label Stagger Step (bars)', minval = 2, maxval = 200, group = GRP_LBL, tooltip = 'فاصله جلو‌رفتن هر لیبل متداخل به سمت راست (بر حسب کندل)')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 
-// --- تابع جلوگیری از تداخل لیبل‌ها: اگر لیبل جدید با لیبل قبلی قیمتی نزدیک دارد، جلوتر می‌رود ---
+// --- از وسط شروع؛ اگر با لیبل قبلی قیمت/موقعیت نزدیک بود، کم‌کم به راست برو ---
 getStaggerX(float price, int baseX) =>
     int maxX = bar_index + 490
-    int x = math.min(baseX, maxX)
+    // وسطِ بازهٔ روبه‌جلو (نزدیک کندل جاری)، نه وسطِ کل خطِ قدیمی
+    int x = math.min(math.max(baseX, bar_index), maxX)
     bool collision = true
     int guard = 0
-    while collision and guard < 40
+    while collision and guard < 50
         collision := false
         n = g_stagLabelPrice.size()
         if n > 0
             for i = 0 to n - 1
-                if g_stagLabelX.get(i) == x
+                int ox = g_stagLabelX.get(i)
+                // تداخل اگر روی X نزدیک هم باشند و قیمت‌ها نزدیک باشند
+                if math.abs(ox - x) < targetLabelStaggerStep
                     p = g_stagLabelPrice.get(i)
                     refP = math.max(math.abs(p), 0.0000001)
-                    diffPct = math.abs(p - price) / refP * 100
+                    diffPct = math.abs(p - price) / refP * 100.0
                     if diffPct <= targetLabelPriceTolerancePct
                         collision := true
                         break
@@ -563,6 +566,15 @@ getStaggerX(float price, int baseX) =>
 resetLabelStagger() =>
     g_stagLabelPrice.clear()
     g_stagLabelX.clear()
+
+// لیبل تارگت با جابجایی ضدتداخل (از وسط به راست)
+placeTargetLabel(float price, int baseX, string txt, color textCol) =>
+    int lblX = getStaggerX(price, baseX)
+    trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = textCol, size = textSizeFromString(targetLabelSize)))
+
+// نقطهٔ شروع لیبل = وسطِ بازه از کندل جاری تا انتهای خط
+targetLabelBaseX(int gapBars) =>
+    int(bar_index + math.max(gapBars / 2, 8))
 
 method initColor(series NDS this) =>
     this.colors.push(Color.new(this.settings.c1))
@@ -720,9 +732,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             dFirst  = chart.point.from_index(node.indexNode, targetDoublePrice)
                             dSecond = chart.point.from_index(bar_index + gapBars, targetDoublePrice)
                             trackLine(line.new(dFirst, dSecond, color = color.new(lineColor, lineTransparency), width = doubleWidth, style = lnStyleDouble))
-                            midX = (node.indexNode + bar_index + gapBars) / 2
-                            dLbl = label.new(x = midX, y = targetDoublePrice, text = trendPrefix + "Double 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                            trackLabel(dLbl)
+                            placeTargetLabel(targetDoublePrice, targetLabelBaseX(gapBars), trendPrefix + "Double 1", lineColor)
 
                     // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5 و 0.86 لازم نیستند
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
@@ -737,9 +747,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             d15First  = chart.point.from_index(node.indexNode, targetDouble15Price)
                             d15Second = chart.point.from_index(bar_index + gapBars, targetDouble15Price)
                             trackLine(line.new(d15First, d15Second, color = color.new(lineColor, lineTransparency), width = double15Width, style = lnStyleDouble15))
-                            midX15 = (node.indexNode + bar_index + gapBars) / 2
-                            d15Lbl = label.new(x = midX15, y = targetDouble15Price, text = trendPrefix + "1.5DOUBLE1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                            trackLabel(d15Lbl)
+                            placeTargetLabel(targetDouble15Price, targetLabelBaseX(gapBars), trendPrefix + "1.5DOUBLE1", lineColor)
 
                     if showDouble086 and not hasNode2
                         // از ابتدای نود ۱ (lowPreNode) تا تارگت Double؛ نقطهٔ نسبت (پیش‌فرض 0.86)
@@ -753,9 +761,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             d086First  = chart.point.from_index(node.indexPreNode, targetDouble086Price)
                             d086Second = chart.point.from_index(bar_index + gapBars, targetDouble086Price)
                             trackLine(line.new(d086First, d086Second, color = color.new(lineColor, lineTransparency), width = double086Width, style = lnStyleDouble086))
-                            midX086 = (node.indexPreNode + bar_index + gapBars) / 2
-                            d086Lbl = label.new(x = midX086, y = targetDouble086Price, text = trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                            trackLabel(d086Lbl)
+                            placeTargetLabel(targetDouble086Price, targetLabelBaseX(gapBars), trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), lineColor)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
@@ -766,9 +772,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             mFirst  = chart.point.from_index(node.indexNode, targetMinPrice)
                             mSecond = chart.point.from_index(bar_index + gapBars, targetMinPrice)
                             trackLine(line.new(mFirst, mSecond, color = color.new(lineColor, lineTransparency), width = minWidth, style = lnStyleMin))
-                            midX = (node.indexNode + bar_index + gapBars) / 2
-                            mLbl = label.new(x = midX, y = targetMinPrice, text = trendPrefix + "Min 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                            trackLabel(mLbl)
+                            placeTargetLabel(targetMinPrice, targetLabelBaseX(gapBars), trendPrefix + "Min 1", lineColor)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
@@ -779,9 +783,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             cFirst  = chart.point.from_index(node.indexNode, targetCorrectionPrice)
                             cSecond = chart.point.from_index(bar_index + gapBars, targetCorrectionPrice)
                             trackLine(line.new(cFirst, cSecond, color = color.new(lineColor, lineTransparency), width = correctionWidth, style = lnStyleCorrection))
-                            midX = (node.indexNode + bar_index + gapBars) / 2
-                            cLbl = label.new(x = midX, y = targetCorrectionPrice, text = trendPrefix + "Correction 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                            trackLabel(cLbl)
+                            placeTargetLabel(targetCorrectionPrice, targetLabelBaseX(gapBars), trendPrefix + "Correction 1", lineColor)
 
 // ================================================================================================
 // تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
@@ -827,9 +829,7 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
                         n2First  = chart.point.from_index(node.indexNode, targetNode2Price)
                         n2Second = chart.point.from_index(bar_index + gapBars, targetNode2Price)
                         trackLine(line.new(n2First, n2Second, color = color.new(lineColor, lineTransparency), width = node2Width, style = lnStyleNode2))
-                        midX = (node.indexNode + bar_index + gapBars) / 2
-                        n2Lbl = label.new(x = midX, y = targetNode2Price, text = trendPrefix + "Node 2", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                        trackLabel(n2Lbl)
+                        placeTargetLabel(targetNode2Price, targetLabelBaseX(gapBars), trendPrefix + "Node 2", lineColor)
 
 // ================================================================================================
 // تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
@@ -879,8 +879,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             f1 = chart.point.from_index(node1.indexNode, minPrice)
                             s1 = chart.point.from_index(bar_index + gapBars, minPrice)
                             trackLine(line.new(f1, s1, color = color.new(lineColor, lineTransparency), width = minWidth, style = lnStyleMin))
-                            midX = (node1.indexNode + bar_index + gapBars) / 2
-                            trackLabel(label.new(x = midX, y = minPrice, text = trendPrefix + "Min 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
+                            placeTargetLabel(minPrice, targetLabelBaseX(gapBars), trendPrefix + "Min 12", lineColor)
 
                     if showMax
                         maxPrice = swUptrendType ? math.exp(math.log(node2.lowCorrection) + totalMoveLog) : math.exp(math.log(node2.lowCorrection) - totalMoveLog)
@@ -891,8 +890,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             f2 = chart.point.from_index(node2.indexNode, maxPrice)
                             s2 = chart.point.from_index(bar_index + gapBars, maxPrice)
                             trackLine(line.new(f2, s2, color = color.new(lineColor, lineTransparency), width = maxWidth, style = lnStyleMax))
-                            midX = (node2.indexNode + bar_index + gapBars) / 2
-                            trackLabel(label.new(x = midX, y = maxPrice, text = trendPrefix + "Max 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
+                            placeTargetLabel(maxPrice, targetLabelBaseX(gapBars), trendPrefix + "Max 12", lineColor)
 
                     if showDouble
                         dblPrice = swUptrendType ? math.exp(math.log(node2.highNode) + totalMoveLog) : math.exp(math.log(node2.highNode) - totalMoveLog)
@@ -903,8 +901,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             f3 = chart.point.from_index(node2.indexNode, dblPrice)
                             s3 = chart.point.from_index(bar_index + gapBars, dblPrice)
                             trackLine(line.new(f3, s3, color = color.new(lineColor, lineTransparency), width = doubleWidth, style = lnStyleDouble))
-                            midX = (node2.indexNode + bar_index + gapBars) / 2
-                            trackLabel(label.new(x = midX, y = dblPrice, text = trendPrefix + "Double 12", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
+                            placeTargetLabel(dblPrice, targetLabelBaseX(gapBars), trendPrefix + "Double 12", lineColor)
 
                     if showCorrection
                         correctionSizeLog2 = math.abs(math.log(node2.highNode) - math.log(node2.lowCorrection))
@@ -916,8 +913,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                             f4 = chart.point.from_index(node2.indexNode, corrPrice12)
                             s4 = chart.point.from_index(bar_index + gapBars, corrPrice12)
                             trackLine(line.new(f4, s4, color = color.new(lineColor, lineTransparency), width = correctionWidth, style = lnStyleCorrection))
-                            midX = (node2.indexNode + bar_index + gapBars) / 2
-                            trackLabel(label.new(x = midX, y = corrPrice12, text = trendPrefix + "Correction 2", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize)))
+                            placeTargetLabel(corrPrice12, targetLabelBaseX(gapBars), trendPrefix + "Correction 2", lineColor)
 
 //#endregion
 
@@ -944,7 +940,6 @@ drawRoundNumberTargets(float basePrice, bool isUp, int gapBars, bool deleteHit, 
         // مثل بقیه تارگت‌ها: خط از کندل جاری به جلو (نه به تاریخ گذشته)
         int lineStartIdx = bar_index
         int lineEndIdx = bar_index + gapBars
-        int midX = int((lineStartIdx + lineEndIdx) / 2)
 
         if endMult >= startMult
             int totalLevels = endMult - startMult + 1
@@ -965,8 +960,7 @@ drawRoundNumberTargets(float basePrice, bool isUp, int gapBars, bool deleteHit, 
                         rFirst  = chart.point.from_index(lineStartIdx, roundPrice)
                         rSecond = chart.point.from_index(lineEndIdx, roundPrice)
                         trackLine(line.new(rFirst, rSecond, color = color.new(lineColor, lineTransparency), width = lineWidth, style = lnStyle))
-                        rLbl = label.new(x = midX, y = roundPrice, text = trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
-                        trackLabel(rLbl)
+                        placeTargetLabel(roundPrice, targetLabelBaseX(gapBars), trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), lineColor)
 
 //#endregion
 
@@ -1547,7 +1541,7 @@ timeTargetLabelSize = input.string('Tiny', 'Label Size', options = ['Auto', 'Hug
 
 // MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
 var GRP_MAPW = "MAP Weekly Targets"
-enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'High/Low هفتهٔ قبل + ۲۵/۵۰/۷۵٪ و اکستنشن‌های ترند (۱.۲۵x تا ۲x)')
+enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'بر اساس High/Low هفتهٔ قبلِ بسته‌شده (مثل MAPWeekly). خطوط از شروع هفتهٔ جاری رسم می‌شوند.')
 mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
 mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
 mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
@@ -1611,8 +1605,7 @@ drawMapWeeklyLevel(float price, string labelText, color col, int width, string s
         chart.point p2 = chart.point.from_time(endTime, price)
         trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawLabel()
-            int lblX = getStaggerX(price, math.min(labelBarX, bar_index + 490))
-            trackLabel(label.new(x = lblX, y = price, text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+            placeTargetLabel(price, targetLabelBaseX(mapExtendBars), "W.L", col)
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
@@ -1848,8 +1841,7 @@ registerSessionTargetEx(float price, color col, string labelText, int lineWidth)
         f = chart.point.from_index(bar_index, price)
         s = chart.point.from_index(bar_index + targetLabelGapBars, price)
         trackLine(line.new(f, s, color = color.new(col, sessionTargetLineTransparency), width = lineWidth, style = lnStyle))
-        midX = (bar_index + bar_index + targetLabelGapBars) / 2
-        trackLabel(label.new(x = midX, y = price, text = labelText, style = label.style_label_center, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+        placeTargetLabel(price, targetLabelBaseX(targetLabelGapBars), labelText, col)
 
 if bar_index == last_bar_index
     if enableSessionTargets
@@ -1890,15 +1882,13 @@ if bar_index == last_bar_index
         f_open = chart.point.from_index(bar_index, open_today_price)
         s_open = chart.point.from_index(bar_index + targetLabelGapBars, open_today_price)
         trackLine(line.new(f_open, s_open, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = dayOcStyleFromString(openLineStyle)))
-        midX = (bar_index + bar_index + targetLabelGapBars) / 2
-        trackLabel(label.new(x = midX, y = open_today_price, text = "H Day Open", style = label.style_label_center, color = color.new(color.black, 100), textcolor = open_line_color, size = textSizeFromString(targetLabelSize)))
+        placeTargetLabel(open_today_price, targetLabelBaseX(targetLabelGapBars), "H Day Open", open_line_color)
 
     if showDayCloseLine and not na(close_yesterday_price)
         f_close = chart.point.from_index(bar_index, close_yesterday_price)
         s_close = chart.point.from_index(bar_index + targetLabelGapBars, close_yesterday_price)
         trackLine(line.new(f_close, s_close, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = dayOcStyleFromString(closeLineStyle)))
-        midX = (bar_index + bar_index + targetLabelGapBars) / 2
-        trackLabel(label.new(x = midX, y = close_yesterday_price, text = "L Day Close", style = label.style_label_center, color = color.new(color.black, 100), textcolor = close_line_color, size = textSizeFromString(targetLabelSize)))
+        placeTargetLabel(close_yesterday_price, targetLabelBaseX(targetLabelGapBars), "L Day Close", close_line_color)
 
     if showDayOCBox and not na(open_today_price) and not na(close_yesterday_price)
         boxTop = math.max(open_today_price, close_yesterday_price)
