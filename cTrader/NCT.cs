@@ -85,6 +85,12 @@ namespace cAlgo.Indicators
         [Parameter("Show Double (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble { get; set; }
 
+        [Parameter("Show 1.5 Double (Single)", DefaultValue = true, Group = "Node Targets")]
+        public bool ShowDouble15 { get; set; }
+
+        [Parameter("1.5 Double Ratio", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
+        public double Double15Ratio { get; set; }
+
         [Parameter("Show Double 0.86 (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble086 { get; set; }
 
@@ -1586,6 +1592,8 @@ namespace cAlgo.Indicators
               .Append(ShowTargetUp).Append('|')
               .Append(ShowTargetDown).Append('|')
               .Append(ShowDouble).Append('|')
+              .Append(ShowDouble15).Append('|')
+              .Append(Double15Ratio.ToString("R")).Append('|')
               .Append(ShowDouble086).Append('|')
               .Append(Double086Ratio.ToString("R")).Append('|')
               .Append(EnableSingleNode1Targets).Append('|')
@@ -1907,6 +1915,18 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
                             trendPrefix + "Double 1", labelColor);
+                        RegisterDensity(price, swUptrendType, endTime);
+                    }
+                }
+
+                if (ShowDouble15)
+                {
+                    double price = TargetProject(node.HighNode, moveSize * Double15Ratio, swUptrendType);
+
+                    if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
+                    {
+                        DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
+                            trendPrefix + "1.5DOUBLE", labelColor);
                         RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
