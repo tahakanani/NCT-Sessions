@@ -807,10 +807,11 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
                     bool shouldDelete = shouldDeleteHitTarget(targetNode2Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
 
                     if not shouldDelete
-                        n2First  = chart.point.from_index(node.indexCorrection, targetNode2Price)
+                        // خط از انتهای نود ۲ شروع می‌شود
+                        n2First  = chart.point.from_index(node.indexNode, targetNode2Price)
                         n2Second = chart.point.from_index(bar_index + gapBars, targetNode2Price)
                         trackLine(line.new(n2First, n2Second, color = color.new(lineColor, lineTransparency), width = node2Width, style = lnStyleNode2))
-                        midX = (node.indexCorrection + bar_index + gapBars) / 2
+                        midX = (node.indexNode + bar_index + gapBars) / 2
                         n2Lbl = label.new(x = midX, y = targetNode2Price, text = trendPrefix + "Node 2", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                         trackLabel(n2Lbl)
 
