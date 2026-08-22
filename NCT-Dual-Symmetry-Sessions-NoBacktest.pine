@@ -675,11 +675,12 @@ method drawingLineNodes(series NDS this) =>
 // ================================================================================================
 // تارگت‌های نود ۱ (Double + Double0.86 + Min + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     countNodes = nodesRef.size()
     lnStyleDouble     = doubleStyle     == 'Solid' ? line.style_solid : doubleStyle     == 'Dashed' ? line.style_dashed : line.style_dotted
+    lnStyleDouble15   = double15Style   == 'Solid' ? line.style_solid : double15Style   == 'Dashed' ? line.style_dashed : line.style_dotted
     lnStyleDouble086  = double086Style  == 'Solid' ? line.style_solid : double086Style  == 'Dashed' ? line.style_dashed : line.style_dotted
     lnStyleMin        = minStyle        == 'Solid' ? line.style_solid : minStyle        == 'Dashed' ? line.style_dashed : line.style_dotted
     lnStyleCorrection = correctionStyle == 'Solid' ? line.style_solid : correctionStyle == 'Dashed' ? line.style_dashed : line.style_dotted
@@ -722,6 +723,20 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             midX = (node.indexNode + bar_index + gapBars) / 2
                             dLbl = label.new(x = midX, y = targetDoublePrice, text = trendPrefix + "Double 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(dLbl)
+
+                    // Double 100% از قله؛ 1.5DOUBLE1 = 150% همان حرکت از قله نود ۱
+                    if showDouble15
+                        targetDouble15Price = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog * double15Ratio) : math.exp(math.log(node.highNode) - moveSizeLog * double15Ratio)
+
+                        bool shouldDelete15 = shouldDeleteHitTarget(targetDouble15Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+
+                        if not shouldDelete15
+                            d15First  = chart.point.from_index(node.indexNode, targetDouble15Price)
+                            d15Second = chart.point.from_index(bar_index + gapBars, targetDouble15Price)
+                            trackLine(line.new(d15First, d15Second, color = color.new(lineColor, lineTransparency), width = double15Width, style = lnStyleDouble15))
+                            midX15 = (node.indexNode + bar_index + gapBars) / 2
+                            d15Lbl = label.new(x = midX15, y = targetDouble15Price, text = trendPrefix + "1.5DOUBLE1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
+                            trackLabel(d15Lbl)
 
                     // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت 0.86 دیگر لازم نیست
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
@@ -993,7 +1008,7 @@ showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', g
 showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
 
 var GRP5 = "Node Targets — Master Switches"
-enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + Double0.86 + Min + Correction)', group = GRP5)
+enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + Double0.86 + Min + Correction)', group = GRP5)
 enableSingleNode2Targets = input.bool(true, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
@@ -1019,16 +1034,20 @@ roundLineColor          = input.color(color.new(color.gray, 30), 'Round Number L
 roundMinVisiblePrice    = input.float(3000.0, 'Round Min Visible Price (0=auto)', minval = 0.0, group = GRP10)
 
 var GRP6 = "Node 1 Targets (Single)"
-showTargetDoubleInput     = input.bool(true, 'Show Target Double (from node itself)', group = GRP6)
+showTargetDoubleInput     = input.bool(true, 'Show Target Double (100% from node peak)', group = GRP6)
+showTargetDouble15Input   = input.bool(true, 'Show Target 1.5DOUBLE1 (150% from node peak)', group = GRP6, tooltip = 'همان Double نود ۱ با نسبت ۱.۵ از قله نود')
+double15Ratio             = input.float(1.5, '1.5DOUBLE1 Ratio', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب حرکت از قله نود ۱؛ پیش‌فرض ۱.۵ (= ۱۵۰٪)')
 showTargetDouble086Input  = input.bool(true, 'Show Target Double 0.86 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
 double086Ratio            = input.float(0.86, 'Start→Double Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۶')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble086Width  = input.int(1, 'Target Double 0.86 Line Width', minval = 1, maxval = 4, group = GRP6)
 targetMinWidth        = input.int(3, 'Target Min Line Width', minval = 1, maxval = 4, group = GRP6)
 targetCorrectionWidth = input.int(1, 'Target Correction Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDoubleStyle     = input.string('Dashed', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble15Style   = input.string('Dashed', 'Target 1.5DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetDouble086Style  = input.string('Dotted', 'Target Double 0.86 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetMinStyle        = input.string('Solid', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetCorrectionStyle = input.string('Dashed', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
@@ -1148,9 +1167,9 @@ if bar_index == last_bar_index
 
     if enableSingleNode1Targets
         if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
         if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
 
     if enableSingleNode2Targets
         if showTargetNode1Up
@@ -1569,11 +1588,6 @@ line_length = math.round(line_length_factor * 10)
 
 is_new_day = ta.change(time("D")) != 0
 
-// شروع هفتهٔ جاری برای رسم خطوط MAP (با time؛ در ۱ دقیقه bar_index خیلی دور می‌شود)
-var int mapWeekStartTime = na
-if na(mapWeekStartTime) or ta.change(time("W")) != 0
-    mapWeekStartTime := time
-
 // هفتهٔ قبل (کندل هفتگی کامل‌شده)
 [mapPwHigh, mapPwLow] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_off)
 
@@ -1921,7 +1935,7 @@ if bar_index == last_bar_index
     if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
         float mapRange = mapPwHigh - mapPwLow
         if mapRange > 0
-            int mapStartTime = nz(mapWeekStartTime, time("W"))
+            int mapStartTime = time("W")
             int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
             int mapEndTime = time + mapExtendBars * tfMs
             int mapLabelBarX = bar_index + mapExtendBars
