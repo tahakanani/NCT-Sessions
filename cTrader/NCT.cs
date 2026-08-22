@@ -2537,7 +2537,6 @@ namespace cAlgo.Indicators
                 int skip = TargetMaxCount <= 0 ? 0 : Math.Max(qualifies.Count - TargetMaxCount, 0);
                 for (int q = skip; q < qualifies.Count; q++)
                     DrawOneTimeTarget(nodes[qualifies[q]], prefix + "Time 1", isUp, style);
-                }
             }
 
             if (ShowTimeTargetNode2)
