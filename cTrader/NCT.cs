@@ -1,5 +1,5 @@
 // NCT Dual Symmetry Indicator for cTrader Automate
-// Port of Pine core engine + node targets + density + Asia session (no POV)
+// Port of Pine core engine + node targets + Asia session (no POV)
 using System;
 using System.Collections.Generic;
 using cAlgo.API;
@@ -156,17 +156,6 @@ namespace cAlgo.Indicators
 
         [Parameter("Transparency (0-100)", DefaultValue = 60, MinValue = 0, MaxValue = 100, Group = "Node Targets")]
         public int TargetTransparency { get; set; }
-
-        // ───────────────────────── Density ─────────────────────────
-
-        [Parameter("Enable Density", DefaultValue = true, Group = "Close Target Detection")]
-        public bool EnableDensity { get; set; }
-
-        [Parameter("Red Tolerance (%)", DefaultValue = 0.001, MinValue = 0.0001, MaxValue = 10, Group = "Close Target Detection")]
-        public double RedTolerancePct { get; set; }
-
-        [Parameter("Yellow Tolerance (%)", DefaultValue = 0.005, MinValue = 0.0001, MaxValue = 10, Group = "Close Target Detection")]
-        public double YellowTolerancePct { get; set; }
 
         // ───────────────────────── Day Open / Close ─────────────────────────
 
@@ -358,9 +347,6 @@ namespace cAlgo.Indicators
         private readonly List<Node> _nodesUp = new List<Node>();
         private readonly List<Node> _nodesDown = new List<Node>();
         private readonly List<Color> _colors = new List<Color>();
-        private readonly List<double> _densityPrices = new List<double>();
-        private readonly List<bool> _densityIsUp = new List<bool>();
-        private readonly List<DateTime> _densityLabelTimes = new List<DateTime>();
         private readonly List<double> _stagLabelPrices = new List<double>();
         private readonly List<DateTime> _stagLabelTimes = new List<DateTime>();
 
@@ -382,8 +368,6 @@ namespace cAlgo.Indicators
         private double _priceHighestDown;
         private int _indexHighestDown;
 
-        private int _redDensityCount;
-        private int _yellowDensityCount;
         private int _fvgBullCount;
         private int _fvgBearCount;
         private int _fvgBullMitigated;
@@ -392,7 +376,7 @@ namespace cAlgo.Indicators
         private Bars _weeklyBars;
 
         private const string ObjectPrefix = "NCT_";
-        private const string StatsName = "NCT_DensityStats";
+        private const string StatsName = "NCT_Stats";
         private bool _rebuilding;
 
         // ───────────────────────── Lifecycle ─────────────────────────
@@ -500,13 +484,8 @@ namespace cAlgo.Indicators
                 }
 
                 RemoveDrawings();
-                _densityPrices.Clear();
-                _densityIsUp.Clear();
-                _densityLabelTimes.Clear();
                 _stagLabelPrices.Clear();
                 _stagLabelTimes.Clear();
-                _redDensityCount = 0;
-                _yellowDensityCount = 0;
                 _objSeq = 0;
 
                 if (_nodesUp.Count > 0)
@@ -556,9 +535,6 @@ namespace cAlgo.Indicators
                 if (EnableMapWeekly)
                     DrawingMapWeekly();
 
-                if (EnableDensity)
-                    DrawDensityClusters();
-
                 DrawStatsOverlay();
 
                 _lastDrawSignature = signature;
@@ -581,14 +557,9 @@ namespace cAlgo.Indicators
             _nodesUp.Clear();
             _nodesDown.Clear();
             _colors.Clear();
-            _densityPrices.Clear();
-            _densityIsUp.Clear();
-            _densityLabelTimes.Clear();
             _stagLabelPrices.Clear();
             _stagLabelTimes.Clear();
             _objSeq = 0;
-            _redDensityCount = 0;
-            _yellowDensityCount = 0;
             _fvgBullCount = 0;
             _fvgBearCount = 0;
             _fvgBullMitigated = 0;
@@ -1605,7 +1576,6 @@ namespace cAlgo.Indicators
               .Append(TargetGapBars).Append('|')
               .Append(DeleteHitTargets).Append('|')
               .Append(HitGraceBars).Append('|')
-              .Append(EnableDensity).Append('|')
               .Append(ShowDayOpenTarget).Append('|')
               .Append(ShowDayCloseTarget).Append('|')
               .Append(ShowDayOcPanel).Append('|')
@@ -1696,15 +1666,6 @@ namespace cAlgo.Indicators
                 return false;
 
             return (lastIndex - firstHitBar) >= HitGraceBars;
-        }
-
-        private void RegisterDensity(double price, bool isUp, DateTime endTime)
-        {
-            if (!EnableDensity || double.IsNaN(price) || double.IsInfinity(price) || price <= 0)
-                return;
-            _densityPrices.Add(price);
-            _densityIsUp.Add(isUp);
-            _densityLabelTimes.Add(endTime);
         }
 
         private DateTime TargetLabelTime(DateTime startTime, DateTime endTime)
@@ -1915,7 +1876,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
                             trendPrefix + "Double 1", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -1927,7 +1887,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
                             trendPrefix + "1.5DOUBLE", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -1945,7 +1904,6 @@ namespace cAlgo.Indicators
                             DrawTargetLine(startTime, endTime, price, lineColor, Double086LineWidth,
                                 ParseLineStyle(Double086LineStyleName),
                                 trendPrefix + "D " + Double086Ratio.ToString("0.##"), labelColor);
-                            RegisterDensity(price, swUptrendType, endTime);
                         }
                     }
                 }
@@ -1958,7 +1916,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth, styleMin,
                             trendPrefix + "Min 1", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -1970,7 +1927,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, CorrectionLineWidth, styleDash,
                             trendPrefix + "Correction 1", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
             }
@@ -2027,7 +1983,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(TimeAtIndex(node1.IndexNode), endTime, price, lineColor, MinLineWidth, styleMin,
                             trendPrefix + "Min 12", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -2039,7 +1994,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(TimeAtIndex(node2.IndexNode), endTime, price, lineColor, PairMaxLineWidth, styleMin,
                             trendPrefix + "Max 12", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -2051,7 +2005,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(TimeAtIndex(node2.IndexNode), endTime, price, lineColor, DoubleLineWidth, styleDash,
                             trendPrefix + "Double 12", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
 
@@ -2064,7 +2017,6 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(TimeAtIndex(node2.IndexNode), endTime, price, lineColor, CorrectionLineWidth, styleDash,
                             trendPrefix + "Correction 2", labelColor);
-                        RegisterDensity(price, swUptrendType, endTime);
                     }
                 }
             }
@@ -2144,7 +2096,6 @@ namespace cAlgo.Indicators
                 {
                     DrawTargetLine(startTime, endTime, openToday, Color.Lime, 2, LineStyle.Solid,
                         "H Day Open", Color.Lime);
-                    RegisterDensity(openToday, true, endTime);
                 }
             }
 
@@ -2155,7 +2106,6 @@ namespace cAlgo.Indicators
                 {
                     DrawTargetLine(startTime, endTime, closeYesterday, Color.Red, 2, LineStyle.Dots,
                         "L Day Close", Color.Red);
-                    RegisterDensity(closeYesterday, false, endTime);
                 }
             }
 
@@ -2307,14 +2257,12 @@ namespace cAlgo.Indicators
             {
                 DrawTargetLine(tgtStart, tgtEnd, latest.High, asiaYellow, 1, LineStyle.Dots,
                     label + " High", asiaYellow);
-                RegisterDensity(latest.High, true, tgtEnd);
             }
 
             if (AsiaShowLowTarget)
             {
                 DrawTargetLine(tgtStart, tgtEnd, latest.Low, asiaYellow, 1, LineStyle.Dots,
                     label + " Low", asiaYellow);
-                RegisterDensity(latest.Low, false, tgtEnd);
             }
 
             if (AsiaShowMidTarget)
@@ -2322,7 +2270,6 @@ namespace cAlgo.Indicators
                 double mid = (latest.High + latest.Low) / 2.0;
                 DrawTargetLine(tgtStart, tgtEnd, mid, asiaYellow, 1, LineStyle.Dots,
                     label + " Mid", asiaYellow);
-                RegisterDensity(mid, true, tgtEnd);
             }
         }
 
@@ -2539,12 +2486,10 @@ namespace cAlgo.Indicators
             if (MapShowHigh)
             {
                 DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "PW High", highColor);
-                RegisterDensity(high, true, lineEnd);
             }
             if (MapShowLow)
             {
                 DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "PW Low", lowColor);
-                RegisterDensity(low, false, lineEnd);
             }
             if (MapShowMid)
                 DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "50%", midColor);
@@ -2568,24 +2513,23 @@ namespace cAlgo.Indicators
         {
             double sign = above ? 1.0 : -1.0;
             if (MapShow1125)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.125, "1.125x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.125, "1.125x", color, style);
             if (MapShow125)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.25, "1.25x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.25, "1.25x", color, style);
             if (MapShow1375)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.375, "1.375x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.375, "1.375x", color, style);
             if (MapShow150)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.50, "1.5x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.50, "1.5x", color, style);
             if (MapShow175)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.75, "1.75x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.75, "1.75x", color, style);
             if (MapShow200)
-                DrawMapExtLevel(start, end, origin + sign * range * 1.00, "2x", color, style, above);
+                DrawMapExtLevel(start, end, origin + sign * range * 1.00, "2x", color, style);
         }
 
         private void DrawMapExtLevel(DateTime start, DateTime end, double price, string label,
-            Color color, LineStyle style, bool isUp)
+            Color color, LineStyle style)
         {
             DrawTargetLine(start, end, price, color, 1, style, label, color);
-            RegisterDensity(price, isUp, end);
         }
 
         private DateTime FindCurrentWeekStart(DateTime currentWeekOpen)
@@ -2601,93 +2545,10 @@ namespace cAlgo.Indicators
             return Bars.OpenTimes[0];
         }
 
-        // ───────────────────────── Density ─────────────────────────
-
-        private void DrawDensityClusters()
-        {
-            int n = _densityPrices.Count;
-            if (n < 2)
-                return;
-
-            var order = new List<int>(n);
-            for (int i = 0; i < n; i++)
-                order.Add(i);
-            order.Sort((a, b) => _densityPrices[a].CompareTo(_densityPrices[b]));
-
-            var used = new bool[n];
-
-            for (int oi = 0; oi < n; oi++)
-            {
-                int i = order[oi];
-                if (used[i])
-                    continue;
-
-                bool trendI = _densityIsUp[i];
-                double runMin = _densityPrices[i];
-                double runMax = runMin;
-                DateTime runEndTime = _densityLabelTimes[i];
-                var cluster = new List<int> { i };
-
-                for (int oj = oi + 1; oj < n; oj++)
-                {
-                    int j = order[oj];
-                    if (used[j])
-                        continue;
-
-                    double priceJ = _densityPrices[j];
-                    double refP = Math.Max(Math.Abs(runMin), 1e-7);
-                    double widthProbe = (Math.Max(runMax, priceJ) - Math.Min(runMin, priceJ)) / refP * 100.0;
-                    if (widthProbe > YellowTolerancePct)
-                        break;
-
-                    if (_densityIsUp[j] != trendI)
-                        continue;
-
-                    cluster.Add(j);
-                    runMin = Math.Min(runMin, priceJ);
-                    runMax = Math.Max(runMax, priceJ);
-                    if (_densityLabelTimes[j] > runEndTime)
-                        runEndTime = _densityLabelTimes[j];
-                }
-
-                if (cluster.Count < 2)
-                {
-                    used[i] = true;
-                    continue;
-                }
-
-                for (int k = 0; k < cluster.Count; k++)
-                    used[cluster[k]] = true;
-
-                double refW = Math.Max(Math.Abs(runMin), 1e-7);
-                double widthPct = (runMax - runMin) / refW * 100.0;
-                double midPrice = (runMin + runMax) / 2.0;
-
-                bool asRed = widthPct <= RedTolerancePct;
-                bool asYellow = !asRed && widthPct <= YellowTolerancePct;
-                if (!asRed && !asYellow)
-                    continue;
-
-                if (asRed)
-                    _redDensityCount++;
-                else
-                    _yellowDensityCount++;
-
-                // Density dots at the right end of the target line.
-                Color dotColor = asRed ? Color.Red : Color.Yellow;
-                var circ = Chart.DrawText(NextName("Dens"), "●", runEndTime, midPrice, dotColor);
-                circ.FontSize = 14;
-                circ.VerticalAlignment = VerticalAlignment.Center;
-                circ.HorizontalAlignment = HorizontalAlignment.Center;
-            }
-        }
-
         private void DrawStatsOverlay()
         {
             string text =
-                "Red ● " + _redDensityCount +
-                "\nYellow ● " + _yellowDensityCount +
-                "\nUp Nodes " + _nodesUp.Count +
+                "Up Nodes " + _nodesUp.Count +
                 "\nDn Nodes " + _nodesDown.Count;
             if (EnableFvg && FvgShowDash)
             {
