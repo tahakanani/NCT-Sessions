@@ -288,23 +288,6 @@ namespace cAlgo.Indicators
         [Parameter("Show FVG Dashboard", DefaultValue = false, Group = "Fair Value Gap")]
         public bool FvgShowDash { get; set; }
 
-        // ───────────────────────── Time Targets ─────────────────────────
-
-        [Parameter("Show Time Targets", DefaultValue = true, Group = "Time Targets")]
-        public bool ShowTimeTargets { get; set; }
-
-        [Parameter("Time Target Node 1", DefaultValue = true, Group = "Time Targets")]
-        public bool ShowTimeTargetNode1 { get; set; }
-
-        [Parameter("Time Target Node 2", DefaultValue = true, Group = "Time Targets")]
-        public bool ShowTimeTargetNode2 { get; set; }
-
-        [Parameter("Time Target Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Time Targets")]
-        public int TimeTargetLineWidth { get; set; }
-
-        [Parameter("Time Target Line Style", DefaultValue = "Dotted", Group = "Time Targets")]
-        public string TimeTargetLineStyleName { get; set; }
-
         // ───────────────────────── MAP Weekly ─────────────────────────
 
         [Parameter("Enable MAP Weekly", DefaultValue = true, Group = "MAP Weekly")]
@@ -563,9 +546,6 @@ namespace cAlgo.Indicators
 
                 if (EnableFvg)
                     DrawingFairValueGaps();
-
-                if (ShowTimeTargets)
-                    DrawingTimeTargets();
 
                 if (EnableMapWeekly)
                     DrawingMapWeekly();
@@ -1624,7 +1604,6 @@ namespace cAlgo.Indicators
               .Append(EnableRoundTargets).Append('|')
               .Append(RoundBasePrice.ToString("R")).Append('|')
               .Append(EnableFvg).Append('|')
-              .Append(ShowTimeTargets).Append('|')
               .Append(EnableMapWeekly).Append('|')
               .Append(MapShow150).Append('|')
               .Append(FvgExtend).Append('|')
@@ -2504,77 +2483,6 @@ namespace cAlgo.Indicators
                         Bars.OpenTimes[lastIndex], lvl, col, 1, LineStyle.Solid);
                 }
             }
-        }
-
-        private void DrawingTimeTargets()
-        {
-            if (!ShowTimeTargetNode1 && !ShowTimeTargetNode2)
-                return;
-
-            LineStyle style = ParseLineStyle(TimeTargetLineStyleName);
-            if (ShowTargetUp)
-                DrawTimeTargetsForTrend(true, style);
-            if (ShowTargetDown)
-                DrawTimeTargetsForTrend(false, style);
-        }
-
-        private void DrawTimeTargetsForTrend(bool isUp, LineStyle style)
-        {
-            var nodes = isUp ? _nodesUp : _nodesDown;
-            if (nodes.Count == 0)
-                return;
-
-            string prefix = isUp ? "H " : "L ";
-
-            if (ShowTimeTargetNode1)
-            {
-                var qualifies = new List<int>();
-                for (int i = 0; i < nodes.Count; i++)
-                {
-                    if (nodes[i].NumberNode == 1)
-                        qualifies.Add(i);
-                }
-                int skip = TargetMaxCount <= 0 ? 0 : Math.Max(qualifies.Count - TargetMaxCount, 0);
-                for (int q = skip; q < qualifies.Count; q++)
-                    DrawOneTimeTarget(nodes[qualifies[q]], prefix + "Time 1", isUp, style);
-            }
-
-            if (ShowTimeTargetNode2)
-            {
-                var pairStarts = new List<int>();
-                for (int i = 0; i < nodes.Count - 1; i++)
-                {
-                    if (nodes[i].NumberNode == 1 && nodes[i + 1].NumberNode == 2)
-                        pairStarts.Add(i);
-                }
-                int skip = PairMaxCount <= 0 ? 0 : Math.Max(pairStarts.Count - PairMaxCount, 0);
-                for (int p = skip; p < pairStarts.Count; p++)
-                    DrawOneTimeTarget(nodes[pairStarts[p] + 1], prefix + "Time 2", isUp, style);
-            }
-        }
-
-        private void DrawOneTimeTarget(Node node, string label, bool isUp, LineStyle style)
-        {
-            int dur = node.IndexNode - node.IndexPreNode;
-            if (dur < 1)
-                return;
-
-            int tIdx = node.IndexNode + dur;
-            DateTime t = TimeAtIndex(tIdx);
-            double y1 = Math.Min(node.LowPreNode, node.LowCorrection);
-            double y2 = Math.Max(node.LowPreNode, node.HighNode);
-            if (y2 <= y1)
-            {
-                y1 = node.HighNode;
-                y2 = node.LowPreNode;
-            }
-
-            Color col = isUp ? Color.FromArgb(200, 122, 162, 255) : Color.FromArgb(200, 255, 159, 28);
-            Chart.DrawTrendLine(NextName("Tm"), t, y1, t, y2, col, TimeTargetLineWidth, style);
-            var txt = Chart.DrawText(NextName("TmLbl"), label, t, isUp ? y2 : y1, col);
-            txt.FontSize = TargetFontSizeValue();
-            txt.HorizontalAlignment = HorizontalAlignment.Center;
-            txt.VerticalAlignment = isUp ? VerticalAlignment.Top : VerticalAlignment.Bottom;
         }
 
         private void DrawingMapWeekly()
