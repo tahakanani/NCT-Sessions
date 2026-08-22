@@ -567,15 +567,6 @@ resetLabelStagger() =>
     g_stagLabelPrice.clear()
     g_stagLabelX.clear()
 
-// لیبل تارگت با جابجایی ضدتداخل (از وسط به راست)
-placeTargetLabel(float price, int baseX, string txt, color textCol) =>
-    int lblX = getStaggerX(price, baseX)
-    trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = textCol, size = textSizeFromString(targetLabelSize)))
-
-// نقطهٔ شروع لیبل = وسطِ بازه از کندل جاری تا انتهای خط
-targetLabelBaseX(int gapBars) =>
-    int(bar_index + math.max(gapBars / 2, 8))
-
 method initColor(series NDS this) =>
     this.colors.push(Color.new(this.settings.c1))
     this.colors.push(Color.new(this.settings.c2))
@@ -594,6 +585,15 @@ textSizeFromString(string s) =>
         'Normal' => size.normal
         'Small'  => size.small
         => size.tiny
+
+// لیبل تارگت با جابجایی ضدتداخل (از وسط به راست) — باید بعد از textSizeFromString باشد
+placeTargetLabel(float price, int baseX, string txt, color textCol) =>
+    int lblX = getStaggerX(price, baseX)
+    trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = textCol, size = textSizeFromString(targetLabelSize)))
+
+// نقطهٔ شروع لیبل = وسطِ بازه از کندل جاری تا انتهای خط
+targetLabelBaseX(int gapBars) =>
+    int(bar_index + math.max(gapBars / 2, 8))
 
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes) =>
     array<Node> nodesRef = array.new<Node>()
