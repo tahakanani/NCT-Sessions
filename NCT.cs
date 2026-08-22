@@ -288,6 +288,82 @@ namespace cAlgo.Indicators
         [Parameter("Show FVG Dashboard", DefaultValue = false, Group = "Fair Value Gap")]
         public bool FvgShowDash { get; set; }
 
+        // ───────────────────────── Time Targets ─────────────────────────
+
+        [Parameter("Show Time Targets", DefaultValue = true, Group = "Time Targets")]
+        public bool ShowTimeTargets { get; set; }
+
+        [Parameter("Time Target Node 1", DefaultValue = true, Group = "Time Targets")]
+        public bool ShowTimeTargetNode1 { get; set; }
+
+        [Parameter("Time Target Node 2", DefaultValue = true, Group = "Time Targets")]
+        public bool ShowTimeTargetNode2 { get; set; }
+
+        [Parameter("Time Target Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Time Targets")]
+        public int TimeTargetLineWidth { get; set; }
+
+        [Parameter("Time Target Line Style", DefaultValue = "Dotted", Group = "Time Targets")]
+        public string TimeTargetLineStyleName { get; set; }
+
+        // ───────────────────────── MAP Weekly ─────────────────────────
+
+        [Parameter("Enable MAP Weekly", DefaultValue = true, Group = "MAP Weekly")]
+        public bool EnableMapWeekly { get; set; }
+
+        [Parameter("MAP Show Weekly High", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShowHigh { get; set; }
+
+        [Parameter("MAP Show Weekly Low", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShowLow { get; set; }
+
+        [Parameter("MAP Show 50% Mid", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShowMid { get; set; }
+
+        [Parameter("MAP Show 25% Level", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow25 { get; set; }
+
+        [Parameter("MAP Show 75% Level", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow75 { get; set; }
+
+        [Parameter("MAP Ext Above High", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShowExtAbove { get; set; }
+
+        [Parameter("MAP Ext Below Low", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShowExtBelow { get; set; }
+
+        [Parameter("MAP Show 1.25x", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow125 { get; set; }
+
+        [Parameter("MAP Show 1.5x", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow150 { get; set; }
+
+        [Parameter("MAP Show 1.75x", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow175 { get; set; }
+
+        [Parameter("MAP Show 2x", DefaultValue = true, Group = "MAP Weekly")]
+        public bool MapShow200 { get; set; }
+
+        [Parameter("MAP Show 1.125x", DefaultValue = false, Group = "MAP Weekly")]
+        public bool MapShow1125 { get; set; }
+
+        [Parameter("MAP Show 1.375x", DefaultValue = false, Group = "MAP Weekly")]
+        public bool MapShow1375 { get; set; }
+
+        [Parameter("MAP High Color", DefaultValue = "#FF4D6D", Group = "MAP Weekly")]
+        public string MapHighColorName { get; set; }
+
+        [Parameter("MAP Low Color", DefaultValue = "#7CFF47", Group = "MAP Weekly")]
+        public string MapLowColorName { get; set; }
+
+        [Parameter("MAP Mid Color", DefaultValue = "#FFE566", Group = "MAP Weekly")]
+        public string MapMidColorName { get; set; }
+
+        [Parameter("MAP Retrace Color", DefaultValue = "#7AA2FF", Group = "MAP Weekly")]
+        public string MapRetraceColorName { get; set; }
+
+        [Parameter("MAP Extension Color", DefaultValue = "#C084FC", Group = "MAP Weekly")]
+        public string MapExtColorName { get; set; }
+
         // ───────────────────────── State ─────────────────────────
 
         private readonly List<Node> _nodesUp = new List<Node>();
@@ -324,6 +400,7 @@ namespace cAlgo.Indicators
         private int _fvgBullMitigated;
         private int _fvgBearMitigated;
         private Bars _dailyBars;
+        private Bars _weeklyBars;
 
         private const string ObjectPrefix = "NCT_";
         private const string StatsName = "NCT_DensityStats";
@@ -335,6 +412,7 @@ namespace cAlgo.Indicators
         {
             ResetState();
             try { _dailyBars = MarketData.GetBars(TimeFrame.Daily); } catch { }
+            try { _weeklyBars = MarketData.GetBars(TimeFrame.Weekly); } catch { }
             // Custom plugin timeframes often never send ticks, so Calculate may not run.
             try { Timer.Start(TimeSpan.FromSeconds(1)); } catch { }
         }
@@ -485,6 +563,12 @@ namespace cAlgo.Indicators
 
                 if (EnableFvg)
                     DrawingFairValueGaps();
+
+                if (ShowTimeTargets)
+                    DrawingTimeTargets();
+
+                if (EnableMapWeekly)
+                    DrawingMapWeekly();
 
                 if (EnableDensity)
                     DrawDensityClusters();
@@ -1540,6 +1624,9 @@ namespace cAlgo.Indicators
               .Append(EnableRoundTargets).Append('|')
               .Append(RoundBasePrice.ToString("R")).Append('|')
               .Append(EnableFvg).Append('|')
+              .Append(ShowTimeTargets).Append('|')
+              .Append(EnableMapWeekly).Append('|')
+              .Append(MapShow150).Append('|')
               .Append(FvgExtend).Append('|')
               .Append(FvgThresholdPer.ToString("R")).Append('|')
               .Append(LabelCollisionTolerancePct.ToString("R")).Append('|')
@@ -2417,6 +2504,182 @@ namespace cAlgo.Indicators
                         Bars.OpenTimes[lastIndex], lvl, col, 1, LineStyle.Solid);
                 }
             }
+        }
+
+        private void DrawingTimeTargets()
+        {
+            if (!ShowTimeTargetNode1 && !ShowTimeTargetNode2)
+                return;
+
+            LineStyle style = ParseLineStyle(TimeTargetLineStyleName);
+            if (ShowTargetUp)
+                DrawTimeTargetsForTrend(true, style);
+            if (ShowTargetDown)
+                DrawTimeTargetsForTrend(false, style);
+        }
+
+        private void DrawTimeTargetsForTrend(bool isUp, LineStyle style)
+        {
+            var nodes = isUp ? _nodesUp : _nodesDown;
+            if (nodes.Count == 0)
+                return;
+
+            string prefix = isUp ? "H " : "L ";
+            int lastIndex = Bars.Count - 1;
+
+            if (ShowTimeTargetNode1)
+            {
+                var qualifies = new List<int>();
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    if (nodes[i].NumberNode == 1)
+                        qualifies.Add(i);
+                }
+                int skip = TargetMaxCount <= 0 ? 0 : Math.Max(qualifies.Count - TargetMaxCount, 0);
+                for (int q = skip; q < qualifies.Count; q++)
+                    DrawOneTimeTarget(nodes[qualifies[q]], prefix + "Time 1", isUp, style);
+                }
+            }
+
+            if (ShowTimeTargetNode2)
+            {
+                var pairStarts = new List<int>();
+                for (int i = 0; i < nodes.Count - 1; i++)
+                {
+                    if (nodes[i].NumberNode == 1 && nodes[i + 1].NumberNode == 2)
+                        pairStarts.Add(i);
+                }
+                int skip = PairMaxCount <= 0 ? 0 : Math.Max(pairStarts.Count - PairMaxCount, 0);
+                for (int p = skip; p < pairStarts.Count; p++)
+                    DrawOneTimeTarget(nodes[pairStarts[p] + 1], prefix + "Time 2", isUp, style);
+            }
+        }
+
+        private void DrawOneTimeTarget(Node node, string label, bool isUp, LineStyle style)
+        {
+            int dur = node.IndexNode - node.IndexPreNode;
+            if (dur < 1)
+                return;
+
+            int tIdx = node.IndexNode + dur;
+            DateTime t = TimeAtIndex(tIdx);
+            double y1 = Math.Min(node.LowPreNode, node.LowCorrection);
+            double y2 = Math.Max(node.LowPreNode, node.HighNode);
+            if (y2 <= y1)
+            {
+                y1 = node.HighNode;
+                y2 = node.LowPreNode;
+            }
+
+            Color col = isUp ? Color.FromArgb(200, 122, 162, 255) : Color.FromArgb(200, 255, 159, 28);
+            Chart.DrawTrendLine(NextName("Tm"), t, y1, t, y2, col, TimeTargetLineWidth, style);
+            var txt = Chart.DrawText(NextName("TmLbl"), label, t, isUp ? y2 : y1, col);
+            txt.FontSize = TargetFontSizeValue();
+            txt.HorizontalAlignment = HorizontalAlignment.Center;
+            txt.VerticalAlignment = isUp ? VerticalAlignment.Top : VerticalAlignment.Bottom;
+        }
+
+        private sealed class WeeklyData
+        {
+            public double High;
+            public double Low;
+            public DateTime WeekOpenTime;
+        }
+
+        private void DrawingMapWeekly()
+        {
+            if (_weeklyBars == null)
+            {
+                try { _weeklyBars = MarketData.GetBars(TimeFrame.Weekly); } catch { return; }
+            }
+            if (_weeklyBars == null || _weeklyBars.Count < 2 || Bars == null || Bars.Count < 2)
+                return;
+
+            int prevIdx = _weeklyBars.Count - 2;
+            var bar = _weeklyBars[prevIdx];
+            double high = bar.High;
+            double low = bar.Low;
+            if (high <= 0 || low <= 0 || double.IsNaN(high) || double.IsNaN(low) || high <= low)
+                return;
+
+            double range = high - low;
+            int lastIndex = Bars.Count - 1;
+            DateTime currentWeekOpen = _weeklyBars.OpenTimes[_weeklyBars.Count - 1];
+            DateTime lineStart = FindCurrentWeekStart(currentWeekOpen);
+            DateTime lineEnd = TimeAtIndex(lastIndex + TargetGapBars);
+
+            Color highColor = ParseColor(MapHighColorName, Color.FromArgb(255, 255, 77, 109));
+            Color lowColor = ParseColor(MapLowColorName, Color.FromArgb(255, 124, 255, 71));
+            Color midColor = ParseColor(MapMidColorName, Color.FromArgb(255, 255, 229, 102));
+            Color retraceColor = ParseColor(MapRetraceColorName, Color.FromArgb(255, 122, 162, 255));
+            Color extColor = ParseColor(MapExtColorName, Color.FromArgb(255, 192, 132, 252));
+            LineStyle keyStyle = LineStyle.Solid;
+            LineStyle midStyle = LineStyle.Dots;
+            LineStyle extStyle = LineStyle.DotsRare;
+
+            if (MapShowHigh)
+            {
+                DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "PW High", highColor);
+                RegisterDensity(high, true, lineEnd);
+            }
+            if (MapShowLow)
+            {
+                DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "PW Low", lowColor);
+                RegisterDensity(low, false, lineEnd);
+            }
+            if (MapShowMid)
+                DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "50%", midColor);
+            if (MapShow25)
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.25, retraceColor, 1, midStyle, "25%", retraceColor);
+            if (MapShow75)
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.75, retraceColor, 1, midStyle, "75%", retraceColor);
+
+            if (MapShowExtAbove)
+            {
+                DrawMapExt(lineStart, lineEnd, high, range, true, extColor, extStyle);
+            }
+            if (MapShowExtBelow)
+            {
+                DrawMapExt(lineStart, lineEnd, low, range, false, extColor, extStyle);
+            }
+        }
+
+        private void DrawMapExt(DateTime start, DateTime end, double origin, double range, bool above,
+            Color color, LineStyle style)
+        {
+            double sign = above ? 1.0 : -1.0;
+            if (MapShow1125)
+                DrawMapExtLevel(start, end, origin + sign * range * 0.125, "1.125x", color, style, above);
+            if (MapShow125)
+                DrawMapExtLevel(start, end, origin + sign * range * 0.25, "1.25x", color, style, above);
+            if (MapShow1375)
+                DrawMapExtLevel(start, end, origin + sign * range * 0.375, "1.375x", color, style, above);
+            if (MapShow150)
+                DrawMapExtLevel(start, end, origin + sign * range * 0.50, "1.5x", color, style, above);
+            if (MapShow175)
+                DrawMapExtLevel(start, end, origin + sign * range * 0.75, "1.75x", color, style, above);
+            if (MapShow200)
+                DrawMapExtLevel(start, end, origin + sign * range * 1.00, "2x", color, style, above);
+        }
+
+        private void DrawMapExtLevel(DateTime start, DateTime end, double price, string label,
+            Color color, LineStyle style, bool isUp)
+        {
+            DrawTargetLine(start, end, price, color, 1, style, label, color);
+            RegisterDensity(price, isUp, end);
+        }
+
+        private DateTime FindCurrentWeekStart(DateTime currentWeekOpen)
+        {
+            if (Bars == null || Bars.Count == 0)
+                return Server.Time;
+
+            for (int i = Bars.Count - 1; i >= 0; i--)
+            {
+                if (Bars.OpenTimes[i] < currentWeekOpen)
+                    return i + 1 < Bars.Count ? Bars.OpenTimes[i + 1] : Bars.OpenTimes[i];
+            }
+            return Bars.OpenTimes[0];
         }
 
         // ───────────────────────── Density ─────────────────────────
