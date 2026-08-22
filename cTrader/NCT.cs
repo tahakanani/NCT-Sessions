@@ -2577,13 +2577,6 @@ namespace cAlgo.Indicators
             txt.VerticalAlignment = isUp ? VerticalAlignment.Top : VerticalAlignment.Bottom;
         }
 
-        private sealed class WeeklyData
-        {
-            public double High;
-            public double Low;
-            public DateTime WeekOpenTime;
-        }
-
         private void DrawingMapWeekly()
         {
             if (_weeklyBars == null)
