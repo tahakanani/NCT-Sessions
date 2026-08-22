@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 //@version=6
-indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+FVG", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
+indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+FVG+MAP", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
 
 // ================================================================================================
 // بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها)
@@ -532,7 +532,7 @@ var g_stagLabelX     = array.new<int>()
 var GRP_LBL = "Target Label Anti-Overlap"
 targetLabelPriceTolerancePct = input.float(0.05, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 5, step = 0.001, group = GRP_LBL, tooltip = 'اگر دو لیبل از نظر قیمتی به این درصد یا کمتر نزدیک باشند، تداخل تشخیص داده شده و یکی جلوتر قرار می‌گیرد')
 targetLabelStaggerStep = input.int(18, 'Label Stagger Step (bars)', minval = 2, maxval = 200, group = GRP_LBL, tooltip = 'فاصله جلو‌رفتن هر لیبل متداخل بر حسب تعداد کندل')
-targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC)')
+targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 
 // --- تابع جلوگیری از تداخل لیبل‌ها: اگر لیبل جدید با لیبل قبلی قیمتی نزدیک دارد، جلوتر می‌رود ---
@@ -1525,6 +1525,37 @@ timeTargetTransparency = input.int(40, 'Line Transparency', minval = 0, maxval =
 showTimeTargetLabels = input.bool(true, 'Show Time Labels', group = GRP_TIMETGT)
 timeTargetLabelSize = input.string('Tiny', 'Label Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_TIMETGT)
 
+// MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
+var GRP_MAPW = "MAP Weekly Targets"
+enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'High/Low هفتهٔ قبل + ۲۵/۵۰/۷۵٪ و اکستنشن‌های ترند (۱.۲۵x تا ۲x)')
+mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
+mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
+mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
+mapShow25   = input.bool(true, 'Show 25%', inline = 'map_mid', group = GRP_MAPW)
+mapShow75   = input.bool(true, 'Show 75%', inline = 'map_mid', group = GRP_MAPW)
+mapShowExtAbove = input.bool(true, 'Extensions Above High', inline = 'map_ext', group = GRP_MAPW)
+mapShowExtBelow = input.bool(true, 'Extensions Below Low', inline = 'map_ext', group = GRP_MAPW)
+mapShow1125 = input.bool(false, '1.125x', inline = 'map_x1', group = GRP_MAPW)
+mapShow125  = input.bool(true, '1.25x', inline = 'map_x1', group = GRP_MAPW)
+mapShow1375 = input.bool(false, '1.375x', inline = 'map_x1', group = GRP_MAPW)
+mapShow150  = input.bool(true, '1.5x', inline = 'map_x2', group = GRP_MAPW)
+mapShow175  = input.bool(true, '1.75x', inline = 'map_x2', group = GRP_MAPW)
+mapShow200  = input.bool(true, '2x', inline = 'map_x2', group = GRP_MAPW)
+mapExtendBars = input.int(150, 'Extend Lines (Bars)', minval = 0, maxval = 490, group = GRP_MAPW)
+mapShowLabels = input.bool(true, 'Show Labels', group = GRP_MAPW)
+mapLineTransparency = input.int(30, 'Line Transparency', minval = 0, maxval = 100, group = GRP_MAPW)
+mapKeyLineWidth = input.int(2, 'Key Line Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapMidLineWidth = input.int(1, 'Mid/Retrace Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapExtLineWidth = input.int(1, 'Extension Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapKeyLineStyle = input.string('Solid', 'Key Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapMidLineStyle = input.string('Dashed', 'Mid Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapExtLineStyle = input.string('Dotted', 'Extension Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapHighColor = input.color(#FF4D6D, 'High Color', inline = 'map_c1', group = GRP_MAPW)
+mapLowColor  = input.color(#7CFF47, 'Low Color', inline = 'map_c1', group = GRP_MAPW)
+mapMidColor  = input.color(#FFE566, 'Mid Color', inline = 'map_c2', group = GRP_MAPW)
+mapRetraceColor = input.color(#7AA2FF, '25/75% Color', inline = 'map_c2', group = GRP_MAPW)
+mapExtColor = input.color(#C084FC, 'Extension Color', group = GRP_MAPW)
+
 dayOcStyleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
@@ -1537,6 +1568,22 @@ line_length_factor = switch
 line_length = math.round(line_length_factor * 10)
 
 is_new_day = ta.change(time("D")) != 0
+
+// شروع هفتهٔ جاری برای رسم خطوط MAP
+var int mapWeekStartBar = 0
+if ta.change(time("W")) != 0 or bar_index == 0
+    mapWeekStartBar := bar_index
+
+// هفتهٔ قبل (کندل هفتگی کامل‌شده) + زمان شروع هفتهٔ جاری
+[mapPwHigh, mapPwLow] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_off)
+
+drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int startIdx, int endIdx) =>
+    if not na(price) and canDrawLine()
+        lnStyle = dayOcStyleFromString(styleStr)
+        trackLine(line.new(startIdx, price, endIdx, price, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
+        if mapShowLabels and canDrawLabel()
+            midX = int((startIdx + endIdx) / 2)
+            trackLabel(label.new(x = midX, y = price, text = labelText, style = label.style_label_center, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
@@ -1868,6 +1915,55 @@ if bar_index == last_bar_index
                                             string lblTxt = (hh < 10 ? '0' : '') + str.tostring(hh) + ':' + (mm < 10 ? '0' : '') + str.tostring(mm)
                                             label ttLbl = label.new(x = ts, y = ttLabelY, text = lblTxt, xloc = xloc.bar_time, style = label.style_label_down, color = color.new(color.black, 100), textcolor = ttCol, size = textSizeFromString(timeTargetLabelSize))
                                             trackLabel(ttLbl)
+
+    // MAP Weekly Targets — High/Low هفتهٔ قبل + ریتریس و اکستنشن (مانند MAPWeekly.cs)
+    if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
+        float mapRange = mapPwHigh - mapPwLow
+        if mapRange > 0
+            int mapStartIdx = mapWeekStartBar
+            int mapEndIdx = bar_index + mapExtendBars
+            float mapMid = (mapPwHigh + mapPwLow) / 2.0
+            float map25 = mapPwLow + mapRange * 0.25
+            float map75 = mapPwLow + mapRange * 0.75
+
+            if mapShowHigh
+                drawMapWeeklyLevel(mapPwHigh, "PW High", mapHighColor, mapKeyLineWidth, mapKeyLineStyle, mapStartIdx, mapEndIdx)
+            if mapShowLow
+                drawMapWeeklyLevel(mapPwLow, "PW Low", mapLowColor, mapKeyLineWidth, mapKeyLineStyle, mapStartIdx, mapEndIdx)
+            if mapShowMid
+                drawMapWeeklyLevel(mapMid, "50%", mapMidColor, mapMidLineWidth, mapMidLineStyle, mapStartIdx, mapEndIdx)
+            if mapShow25
+                drawMapWeeklyLevel(map25, "25%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartIdx, mapEndIdx)
+            if mapShow75
+                drawMapWeeklyLevel(map75, "75%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartIdx, mapEndIdx)
+
+            if mapShowExtAbove
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+
+            if mapShowExtBelow
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartIdx, mapEndIdx)
 
 
 //#endregion
