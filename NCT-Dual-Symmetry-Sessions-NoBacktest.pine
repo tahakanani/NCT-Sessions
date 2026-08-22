@@ -530,30 +530,30 @@ var g_stagLabelX     = array.new<int>()
 
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 var GRP_LBL = "Target Label Anti-Overlap"
-targetLabelPriceTolerancePct = input.float(0.25, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 5, step = 0.001, group = GRP_LBL, tooltip = 'اگر دو لیبل از نظر قیمتی به این درصد یا کمتر نزدیک باشند، تداخل تشخیص داده شده و یکی به راست جابه‌جا می‌شود')
-targetLabelStaggerStep = input.int(28, 'Label Stagger Step (bars)', minval = 2, maxval = 200, group = GRP_LBL, tooltip = 'فاصله جلو‌رفتن هر لیبل متداخل به سمت راست (بر حسب کندل)')
+targetLabelPriceTolerancePct = input.float(1.5, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.05, group = GRP_LBL, tooltip = 'اگر دو لیبل از نظر قیمت نزدیک باشند جابه‌جا می‌شوند؛ برای زوم هم فاصله افقی یکتا اجباری است')
+targetLabelStaggerStep = input.int(40, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'فاصهٔ افقی هر لیبل به سمت راست؛ بزرگ‌تر = کمتر روی‌هم‌افتادن هنگام زوم')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 
-// --- از وسط شروع؛ اگر با لیبل قبلی قیمت/موقعیت نزدیک بود، کم‌کم به راست برو ---
+// --- از وسط شروع؛ هر لیبل X یکتا می‌گیرد تا با زوم روی هم نیفتد ---
 getStaggerX(float price, int baseX) =>
     int maxX = bar_index + 490
-    // وسطِ بازهٔ روبه‌جلو (نزدیک کندل جاری)، نه وسطِ کل خطِ قدیمی
     int x = math.min(math.max(baseX, bar_index), maxX)
     bool collision = true
     int guard = 0
-    while collision and guard < 50
+    while collision and guard < 80
         collision := false
         n = g_stagLabelPrice.size()
         if n > 0
             for i = 0 to n - 1
                 int ox = g_stagLabelX.get(i)
-                // تداخل اگر روی X نزدیک هم باشند و قیمت‌ها نزدیک باشند
+                // اسلات افقی اشغال‌شده → حتماً جابه‌جا شو (مقاوم به زوم)
                 if math.abs(ox - x) < targetLabelStaggerStep
                     p = g_stagLabelPrice.get(i)
                     refP = math.max(math.abs(p), 0.0000001)
                     diffPct = math.abs(p - price) / refP * 100.0
-                    if diffPct <= targetLabelPriceTolerancePct
+                    // قیمت نزدیک یا همان ستون افقی → تداخل
+                    if diffPct <= targetLabelPriceTolerancePct or math.abs(ox - x) < math.max(int(targetLabelStaggerStep * 0.6), 8)
                         collision := true
                         break
         if collision
@@ -586,14 +586,22 @@ textSizeFromString(string s) =>
         'Small'  => size.small
         => size.tiny
 
-// لیبل تارگت با جابجایی ضدتداخل (از وسط به راست) — باید بعد از textSizeFromString باشد
-placeTargetLabel(float price, int baseX, string txt, color textCol) =>
-    int lblX = getStaggerX(price, baseX)
-    trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = textCol, size = textSizeFromString(targetLabelSize)))
-
 // نقطهٔ شروع لیبل = وسطِ بازه از کندل جاری تا انتهای خط
 targetLabelBaseX(int gapBars) =>
     int(bar_index + math.max(gapBars / 2, 8))
+
+styleFromString(string s) =>
+    s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
+
+// خط تا محل لیبل ادامه پیدا می‌کند؛ لیبل از وسط به راست جابه‌جا می‌شود
+drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars) =>
+    if not na(price) and canDrawLine()
+        int baseX = targetLabelBaseX(gapBars)
+        int lblX = getStaggerX(price, baseX)
+        int endIdx = math.max(bar_index + gapBars, lblX)
+        trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(endIdx, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
+        if canDrawLabel()
+            trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
 
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes) =>
     array<Node> nodesRef = array.new<Node>()
@@ -691,11 +699,6 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     countNodes = nodesRef.size()
-    lnStyleDouble     = doubleStyle     == 'Solid' ? line.style_solid : doubleStyle     == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleDouble15   = double15Style   == 'Solid' ? line.style_solid : double15Style   == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleDouble086  = double086Style  == 'Solid' ? line.style_solid : double086Style  == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleMin        = minStyle        == 'Solid' ? line.style_solid : minStyle        == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleCorrection = correctionStyle == 'Solid' ? line.style_solid : correctionStyle == 'Dashed' ? line.style_dashed : line.style_dotted
 
     colorPerIndex = this.computeNodeColors(nodesRef)
 
@@ -725,65 +728,38 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
 
                     if showDouble
                         targetDoublePrice = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(targetDoublePrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            dFirst  = chart.point.from_index(node.indexNode, targetDoublePrice)
-                            dSecond = chart.point.from_index(bar_index + gapBars, targetDoublePrice)
-                            trackLine(line.new(dFirst, dSecond, color = color.new(lineColor, lineTransparency), width = doubleWidth, style = lnStyleDouble))
-                            placeTargetLabel(targetDoublePrice, targetLabelBaseX(gapBars), trendPrefix + "Double 1", lineColor)
+                            drawTargetLineLabel(node.indexNode, targetDoublePrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 1", gapBars)
 
                     // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5 و 0.86 لازم نیستند
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
 
-                    // Double 100% از قله؛ 1.5DOUBLE1 = 150% همان حرکت — فقط وقتی هنوز نود ۲ نشده
                     if showDouble15 and not hasNode2
                         targetDouble15Price = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog * double15Ratio) : math.exp(math.log(node.highNode) - moveSizeLog * double15Ratio)
-
                         bool shouldDelete15 = shouldDeleteHitTarget(targetDouble15Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete15
-                            d15First  = chart.point.from_index(node.indexNode, targetDouble15Price)
-                            d15Second = chart.point.from_index(bar_index + gapBars, targetDouble15Price)
-                            trackLine(line.new(d15First, d15Second, color = color.new(lineColor, lineTransparency), width = double15Width, style = lnStyleDouble15))
-                            placeTargetLabel(targetDouble15Price, targetLabelBaseX(gapBars), trendPrefix + "1.5DOUBLE1", lineColor)
+                            drawTargetLineLabel(node.indexNode, targetDouble15Price, lineColor, double15Width, double15Style, lineTransparency, trendPrefix + "1.5DOUBLE1", gapBars)
 
                     if showDouble086 and not hasNode2
-                        // از ابتدای نود ۱ (lowPreNode) تا تارگت Double؛ نقطهٔ نسبت (پیش‌فرض 0.86)
                         float startNode1 = node.lowPreNode
                         float doubleEnd = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
                         targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
-
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete086
-                            d086First  = chart.point.from_index(node.indexPreNode, targetDouble086Price)
-                            d086Second = chart.point.from_index(bar_index + gapBars, targetDouble086Price)
-                            trackLine(line.new(d086First, d086Second, color = color.new(lineColor, lineTransparency), width = double086Width, style = lnStyleDouble086))
-                            placeTargetLabel(targetDouble086Price, targetLabelBaseX(gapBars), trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), lineColor)
+                            drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), gapBars)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            mFirst  = chart.point.from_index(node.indexNode, targetMinPrice)
-                            mSecond = chart.point.from_index(bar_index + gapBars, targetMinPrice)
-                            trackLine(line.new(mFirst, mSecond, color = color.new(lineColor, lineTransparency), width = minWidth, style = lnStyleMin))
-                            placeTargetLabel(targetMinPrice, targetLabelBaseX(gapBars), trendPrefix + "Min 1", lineColor)
+                            drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(targetCorrectionPrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            cFirst  = chart.point.from_index(node.indexNode, targetCorrectionPrice)
-                            cSecond = chart.point.from_index(bar_index + gapBars, targetCorrectionPrice)
-                            trackLine(line.new(cFirst, cSecond, color = color.new(lineColor, lineTransparency), width = correctionWidth, style = lnStyleCorrection))
-                            placeTargetLabel(targetCorrectionPrice, targetLabelBaseX(gapBars), trendPrefix + "Correction 1", lineColor)
+                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 1", gapBars)
 
 // ================================================================================================
 // تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
@@ -792,7 +768,6 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     countNodes = nodesRef.size()
-    lnStyleNode2 = node2Style == 'Solid' ? line.style_solid : node2Style == 'Dashed' ? line.style_dashed : line.style_dotted
 
     colorPerIndex = this.computeNodeColors(nodesRef)
 
@@ -817,19 +792,11 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
                         break
                     node = nodesRef.get(i)
                     lineColor = colorPerIndex.get(i)
-                    // اندازه حرکت نود ۲
                     moveSizeLog2 = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
-                    // از انتهای اصلاح نود ۲ در جهت نود ۲
                     targetNode2Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog2) : math.exp(math.log(node.lowCorrection) - moveSizeLog2)
-
                     bool shouldDelete = shouldDeleteHitTarget(targetNode2Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
-
                     if not shouldDelete
-                        // خط از انتهای نود ۲ شروع می‌شود
-                        n2First  = chart.point.from_index(node.indexNode, targetNode2Price)
-                        n2Second = chart.point.from_index(bar_index + gapBars, targetNode2Price)
-                        trackLine(line.new(n2First, n2Second, color = color.new(lineColor, lineTransparency), width = node2Width, style = lnStyleNode2))
-                        placeTargetLabel(targetNode2Price, targetLabelBaseX(gapBars), trendPrefix + "Node 2", lineColor)
+                        drawTargetLineLabel(node.indexNode, targetNode2Price, lineColor, node2Width, node2Style, lineTransparency, trendPrefix + "Node 2", gapBars)
 
 // ================================================================================================
 // تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
@@ -838,10 +805,6 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     countNodes = nodesRef.size()
-    lnStyleMin    = minStyle    == 'Solid' ? line.style_solid : minStyle    == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleMax    = maxStyle    == 'Solid' ? line.style_solid : maxStyle    == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleDouble = doubleStyle == 'Solid' ? line.style_solid : doubleStyle == 'Dashed' ? line.style_dashed : line.style_dotted
-    lnStyleCorrection = correctionStyle == 'Solid' ? line.style_solid : correctionStyle == 'Dashed' ? line.style_dashed : line.style_dotted
 
     colorPerIndex = this.computeNodeColors(nodesRef)
 
@@ -872,48 +835,28 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
 
                     if showMin
                         minPrice = swUptrendType ? math.exp(math.log(node1.lowCorrection) + totalMoveLog) : math.exp(math.log(node1.lowCorrection) - totalMoveLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(minPrice, node1.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            f1 = chart.point.from_index(node1.indexNode, minPrice)
-                            s1 = chart.point.from_index(bar_index + gapBars, minPrice)
-                            trackLine(line.new(f1, s1, color = color.new(lineColor, lineTransparency), width = minWidth, style = lnStyleMin))
-                            placeTargetLabel(minPrice, targetLabelBaseX(gapBars), trendPrefix + "Min 12", lineColor)
+                            drawTargetLineLabel(node1.indexNode, minPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 12", gapBars)
 
                     if showMax
                         maxPrice = swUptrendType ? math.exp(math.log(node2.lowCorrection) + totalMoveLog) : math.exp(math.log(node2.lowCorrection) - totalMoveLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(maxPrice, node2.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            f2 = chart.point.from_index(node2.indexNode, maxPrice)
-                            s2 = chart.point.from_index(bar_index + gapBars, maxPrice)
-                            trackLine(line.new(f2, s2, color = color.new(lineColor, lineTransparency), width = maxWidth, style = lnStyleMax))
-                            placeTargetLabel(maxPrice, targetLabelBaseX(gapBars), trendPrefix + "Max 12", lineColor)
+                            drawTargetLineLabel(node2.indexNode, maxPrice, lineColor, maxWidth, maxStyle, lineTransparency, trendPrefix + "Max 12", gapBars)
 
                     if showDouble
                         dblPrice = swUptrendType ? math.exp(math.log(node2.highNode) + totalMoveLog) : math.exp(math.log(node2.highNode) - totalMoveLog)
-
                         bool shouldDelete = shouldDeleteHitTarget(dblPrice, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            f3 = chart.point.from_index(node2.indexNode, dblPrice)
-                            s3 = chart.point.from_index(bar_index + gapBars, dblPrice)
-                            trackLine(line.new(f3, s3, color = color.new(lineColor, lineTransparency), width = doubleWidth, style = lnStyleDouble))
-                            placeTargetLabel(dblPrice, targetLabelBaseX(gapBars), trendPrefix + "Double 12", lineColor)
+                            drawTargetLineLabel(node2.indexNode, dblPrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 12", gapBars)
 
                     if showCorrection
                         correctionSizeLog2 = math.abs(math.log(node2.highNode) - math.log(node2.lowCorrection))
                         corrPrice12 = swUptrendType ? math.exp(math.log(node2.highNode) + correctionSizeLog2) : math.exp(math.log(node2.highNode) - correctionSizeLog2)
-
                         bool shouldDelete = shouldDeleteHitTarget(corrPrice12, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
-
                         if not shouldDelete
-                            f4 = chart.point.from_index(node2.indexNode, corrPrice12)
-                            s4 = chart.point.from_index(bar_index + gapBars, corrPrice12)
-                            trackLine(line.new(f4, s4, color = color.new(lineColor, lineTransparency), width = correctionWidth, style = lnStyleCorrection))
-                            placeTargetLabel(corrPrice12, targetLabelBaseX(gapBars), trendPrefix + "Correction 2", lineColor)
+                            drawTargetLineLabel(node2.indexNode, corrPrice12, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 2", gapBars)
 
 //#endregion
 
@@ -957,10 +900,7 @@ drawRoundNumberTargets(float basePrice, bool isUp, int gapBars, bool deleteHit, 
 
                 if not shouldDelete
                     if drawVisual
-                        rFirst  = chart.point.from_index(lineStartIdx, roundPrice)
-                        rSecond = chart.point.from_index(lineEndIdx, roundPrice)
-                        trackLine(line.new(rFirst, rSecond, color = color.new(lineColor, lineTransparency), width = lineWidth, style = lnStyle))
-                        placeTargetLabel(roundPrice, targetLabelBaseX(gapBars), trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), lineColor)
+                        drawTargetLineLabel(lineStartIdx, roundPrice, lineColor, lineWidth, lineStyleStr, lineTransparency, trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), gapBars)
 
 //#endregion
 
@@ -1598,14 +1538,18 @@ else if na(mapPwHigh) or na(mapPwLow)
     mapPwLow := mapPwLowRaw
 
 drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int startTime, int endTime, int labelBarX) =>
-    if not na(price) and not na(startTime) and not na(endTime) and canDrawLine()
-        lnStyle = dayOcStyleFromString(styleStr)
-        // از شروع هفتهٔ جاری تا انتها — با time (نه bar_index) تا در ۱ دقیقه خطا ندهد
+    if not na(price) and not na(startTime) and not na(time) and canDrawLine()
+        lnStyle = styleFromString(styleStr)
+        int baseX = targetLabelBaseX(mapExtendBars)
+        int lblX = mapShowLabels ? getStaggerX(price, baseX) : math.max(bar_index + mapExtendBars, baseX)
+        int endIdx = math.max(bar_index + mapExtendBars, lblX)
+        int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
+        int lineEndTime = math.max(nz(endTime, time), time + (endIdx - bar_index) * tfMs)
         chart.point p1 = chart.point.from_time(startTime, price)
-        chart.point p2 = chart.point.from_time(endTime, price)
+        chart.point p2 = chart.point.from_time(lineEndTime, price)
         trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawLabel()
-            placeTargetLabel(price, targetLabelBaseX(mapExtendBars), "W.L", col)
+            trackLabel(label.new(x = lblX, y = price, text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
@@ -1837,11 +1781,7 @@ alertcondition(enableFvg and fvg_bear_mitigated > fvg_bear_mitigated[1], 'Bearis
 
 registerSessionTargetEx(float price, color col, string labelText, int lineWidth) =>
     if not na(price) and canDrawLine() and canDrawLabel()
-        lnStyle = sessionTargetLineStyle == 'Solid' ? line.style_solid : sessionTargetLineStyle == 'Dashed' ? line.style_dashed : line.style_dotted
-        f = chart.point.from_index(bar_index, price)
-        s = chart.point.from_index(bar_index + targetLabelGapBars, price)
-        trackLine(line.new(f, s, color = color.new(col, sessionTargetLineTransparency), width = lineWidth, style = lnStyle))
-        placeTargetLabel(price, targetLabelBaseX(targetLabelGapBars), labelText, col)
+        drawTargetLineLabel(bar_index, price, col, lineWidth, sessionTargetLineStyle, sessionTargetLineTransparency, labelText, targetLabelGapBars)
 
 if bar_index == last_bar_index
     if enableSessionTargets
@@ -1879,16 +1819,10 @@ if bar_index == last_bar_index
                 registerSessionTargetEx(midD, sesd_css, sesd_txt + " Mid", sessionMidLineWidth)
 
     if showDayOpenLine and not na(open_today_price)
-        f_open = chart.point.from_index(bar_index, open_today_price)
-        s_open = chart.point.from_index(bar_index + targetLabelGapBars, open_today_price)
-        trackLine(line.new(f_open, s_open, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = dayOcStyleFromString(openLineStyle)))
-        placeTargetLabel(open_today_price, targetLabelBaseX(targetLabelGapBars), "H Day Open", open_line_color)
+        drawTargetLineLabel(bar_index, open_today_price, open_line_color, openLineWidth, openLineStyle, openLineTransparency, "H Day Open", targetLabelGapBars)
 
     if showDayCloseLine and not na(close_yesterday_price)
-        f_close = chart.point.from_index(bar_index, close_yesterday_price)
-        s_close = chart.point.from_index(bar_index + targetLabelGapBars, close_yesterday_price)
-        trackLine(line.new(f_close, s_close, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = dayOcStyleFromString(closeLineStyle)))
-        placeTargetLabel(close_yesterday_price, targetLabelBaseX(targetLabelGapBars), "L Day Close", close_line_color)
+        drawTargetLineLabel(bar_index, close_yesterday_price, close_line_color, closeLineWidth, closeLineStyle, closeLineTransparency, "L Day Close", targetLabelGapBars)
 
     if showDayOCBox and not na(open_today_price) and not na(close_yesterday_price)
         boxTop = math.max(open_today_price, close_yesterday_price)
