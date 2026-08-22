@@ -2041,7 +2041,7 @@ namespace cAlgo.Indicators
 
             double top = Chart.TopY;
             double bot = Chart.BottomY;
-            int height = Chart.Height;
+            double height = Chart.Height;
             double range = Math.Abs(top - bot);
             if (height < 2 || range < 1e-12)
                 return false;
