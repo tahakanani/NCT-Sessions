@@ -2525,7 +2525,6 @@ namespace cAlgo.Indicators
                 return;
 
             string prefix = isUp ? "H " : "L ";
-            int lastIndex = Bars.Count - 1;
 
             if (ShowTimeTargetNode1)
             {
