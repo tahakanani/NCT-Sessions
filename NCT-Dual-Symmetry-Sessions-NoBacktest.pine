@@ -1591,13 +1591,16 @@ is_new_day = ta.change(time("D")) != 0
 // هفتهٔ قبل (کندل هفتگی کامل‌شده)
 [mapPwHigh, mapPwLow] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_off)
 
-drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int startTime, int endTime, int labelBarX) =>
-    if not na(price) and not na(startTime) and not na(endTime) and canDrawLine()
+drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int endTime, int labelBarX) =>
+    if not na(price) and not na(endTime) and not na(time) and canDrawLine()
         lnStyle = dayOcStyleFromString(styleStr)
-        // xloc.bar_time تا در تایم‌فریم ۱ دقیقه خطای فاصلهٔ bar_index ندهد
-        trackLine(line.new(x1 = startTime, y1 = price, x2 = endTime, y2 = price, xloc = xloc.bar_time, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
+        // فقط از کندل جاری به جلو با time؛ به چپ با extend.left تا خطای bar_index دور در ۱ دقیقه ندهد
+        chart.point p1 = chart.point.from_time(time, price)
+        chart.point p2 = chart.point.from_time(endTime, price)
+        trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle, extend = extend.left))
         if mapShowLabels and canDrawLabel()
-            int lblX = getStaggerX(price, labelBarX)
+            // لیبل نزدیک کندل جاری (نه هفته‌ها عقب)
+            int lblX = getStaggerX(price, math.min(labelBarX, bar_index + 490))
             trackLabel(label.new(x = lblX, y = price, text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
@@ -1935,7 +1938,6 @@ if bar_index == last_bar_index
     if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
         float mapRange = mapPwHigh - mapPwLow
         if mapRange > 0
-            int mapStartTime = time("W")
             int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
             int mapEndTime = time + mapExtendBars * tfMs
             int mapLabelBarX = bar_index + mapExtendBars
@@ -1944,43 +1946,43 @@ if bar_index == last_bar_index
             float map75 = mapPwLow + mapRange * 0.75
 
             if mapShowHigh
-                drawMapWeeklyLevel(mapPwHigh, "PW High", mapHighColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                drawMapWeeklyLevel(mapPwHigh, "PW High", mapHighColor, mapKeyLineWidth, mapKeyLineStyle, mapEndTime, mapLabelBarX)
             if mapShowLow
-                drawMapWeeklyLevel(mapPwLow, "PW Low", mapLowColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                drawMapWeeklyLevel(mapPwLow, "PW Low", mapLowColor, mapKeyLineWidth, mapKeyLineStyle, mapEndTime, mapLabelBarX)
             if mapShowMid
-                drawMapWeeklyLevel(mapMid, "50%", mapMidColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                drawMapWeeklyLevel(mapMid, "50%", mapMidColor, mapMidLineWidth, mapMidLineStyle, mapEndTime, mapLabelBarX)
             if mapShow25
-                drawMapWeeklyLevel(map25, "25%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                drawMapWeeklyLevel(map25, "25%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapEndTime, mapLabelBarX)
             if mapShow75
-                drawMapWeeklyLevel(map75, "75%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                drawMapWeeklyLevel(map75, "75%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapEndTime, mapLabelBarX)
 
             if mapShowExtAbove
                 if mapShow1125
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow125
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow1375
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow150
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow175
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow200
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
 
             if mapShowExtBelow
                 if mapShow1125
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow125
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow1375
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow150
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow175
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
                 if mapShow200
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapEndTime, mapLabelBarX)
 
 
 //#endregion
