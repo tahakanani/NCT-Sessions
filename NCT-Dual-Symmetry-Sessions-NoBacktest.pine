@@ -535,7 +535,7 @@ targetLabelStaggerStep = input.int(40, 'Label Stagger Step (bars)', minval = 4, 
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 
-// --- از وسط شروع؛ هر لیبل X یکتا می‌گیرد تا با زوم روی هم نیفتد ---
+// --- از وسط شروع؛ هر لیبل اسلات افقی یکتا می‌گیرد (مقاوم به زوم) ---
 getStaggerX(float price, int baseX) =>
     int maxX = bar_index + 490
     int x = math.min(math.max(baseX, bar_index), maxX)
@@ -543,19 +543,13 @@ getStaggerX(float price, int baseX) =>
     int guard = 0
     while collision and guard < 80
         collision := false
-        n = g_stagLabelPrice.size()
+        n = g_stagLabelX.size()
         if n > 0
             for i = 0 to n - 1
-                int ox = g_stagLabelX.get(i)
-                // اسلات افقی اشغال‌شده → حتماً جابه‌جا شو (مقاوم به زوم)
-                if math.abs(ox - x) < targetLabelStaggerStep
-                    p = g_stagLabelPrice.get(i)
-                    refP = math.max(math.abs(p), 0.0000001)
-                    diffPct = math.abs(p - price) / refP * 100.0
-                    // قیمت نزدیک یا همان ستون افقی → تداخل
-                    if diffPct <= targetLabelPriceTolerancePct or math.abs(ox - x) < math.max(int(targetLabelStaggerStep * 0.6), 8)
-                        collision := true
-                        break
+                // هر لیبل باید حداقل staggerStep از بقیه فاصله افقی داشته باشد
+                if math.abs(g_stagLabelX.get(i) - x) < targetLabelStaggerStep
+                    collision := true
+                    break
         if collision
             x := math.min(x + targetLabelStaggerStep, maxX)
         guard += 1
