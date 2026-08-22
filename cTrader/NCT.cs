@@ -91,6 +91,12 @@ namespace cAlgo.Indicators
         [Parameter("Start→Double Ratio", DefaultValue = 0.86, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Double086Ratio { get; set; }
 
+        [Parameter("Double 0.86 Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Node Targets")]
+        public int Double086LineWidth { get; set; }
+
+        [Parameter("Double 0.86 Line Style", DefaultValue = "Dotted", Group = "Node Targets")]
+        public string Double086LineStyleName { get; set; }
+
         [Parameter("Show Min (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin { get; set; }
 
@@ -211,6 +217,77 @@ namespace cAlgo.Indicators
         [Parameter("Show Asia Mid Target", DefaultValue = true, Group = "Asia Session")]
         public bool AsiaShowMidTarget { get; set; }
 
+        // ───────────────────────── Day OC Panel ─────────────────────────
+
+        [Parameter("Show Day OC Panel", DefaultValue = true, Group = "Day Open/Close")]
+        public bool ShowDayOcPanel { get; set; }
+
+        // ───────────────────────── Label Anti-Overlap ─────────────────────────
+
+        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.05, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
+        public double LabelCollisionTolerancePct { get; set; }
+
+        [Parameter("Label Stagger Step (bars)", DefaultValue = 18, MinValue = 2, MaxValue = 200, Group = "Target Label Anti-Overlap")]
+        public int LabelStaggerStep { get; set; }
+
+        // ───────────────────────── Round Numbers ─────────────────────────
+
+        [Parameter("Show Round Number Targets", DefaultValue = false, Group = "Round Number Targets")]
+        public bool EnableRoundTargets { get; set; }
+
+        [Parameter("Round Number Base Price", DefaultValue = 10.0, MinValue = 0.0001, Group = "Round Number Targets")]
+        public double RoundBasePrice { get; set; }
+
+        [Parameter("Round Apply Up", DefaultValue = true, Group = "Round Number Targets")]
+        public bool RoundApplyUp { get; set; }
+
+        [Parameter("Round Apply Down", DefaultValue = true, Group = "Round Number Targets")]
+        public bool RoundApplyDown { get; set; }
+
+        [Parameter("Round Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Round Number Targets")]
+        public int RoundLineWidth { get; set; }
+
+        [Parameter("Round Line Style", DefaultValue = "Dashed", Group = "Round Number Targets")]
+        public string RoundLineStyleName { get; set; }
+
+        [Parameter("Round Transparency (0-100)", DefaultValue = 60, MinValue = 0, MaxValue = 100, Group = "Round Number Targets")]
+        public int RoundLineTransparency { get; set; }
+
+        [Parameter("Round Line Color", DefaultValue = "#9CA3AF", Group = "Round Number Targets")]
+        public string RoundLineColorName { get; set; }
+
+        [Parameter("Round Min Visible Price", DefaultValue = 3000.0, MinValue = 0.0, Group = "Round Number Targets")]
+        public double RoundMinVisiblePrice { get; set; }
+
+        // ───────────────────────── Fair Value Gap ─────────────────────────
+
+        [Parameter("Enable Fair Value Gap", DefaultValue = true, Group = "Fair Value Gap")]
+        public bool EnableFvg { get; set; }
+
+        [Parameter("FVG Threshold %", DefaultValue = 0.0, MinValue = 0, MaxValue = 100, Group = "Fair Value Gap")]
+        public double FvgThresholdPer { get; set; }
+
+        [Parameter("FVG Auto Threshold", DefaultValue = false, Group = "Fair Value Gap")]
+        public bool FvgAutoThreshold { get; set; }
+
+        [Parameter("FVG Unmitigated Levels", DefaultValue = 0, MinValue = 0, MaxValue = 50, Group = "Fair Value Gap")]
+        public int FvgShowLast { get; set; }
+
+        [Parameter("FVG Mitigation Levels", DefaultValue = false, Group = "Fair Value Gap")]
+        public bool FvgMitigationLevels { get; set; }
+
+        [Parameter("FVG Extend (bars)", DefaultValue = 20, MinValue = 0, MaxValue = 500, Group = "Fair Value Gap")]
+        public int FvgExtend { get; set; }
+
+        [Parameter("FVG Bull Color", DefaultValue = "#089981", Group = "Fair Value Gap")]
+        public string FvgBullColorName { get; set; }
+
+        [Parameter("FVG Bear Color", DefaultValue = "#F23645", Group = "Fair Value Gap")]
+        public string FvgBearColorName { get; set; }
+
+        [Parameter("Show FVG Dashboard", DefaultValue = false, Group = "Fair Value Gap")]
+        public bool FvgShowDash { get; set; }
+
         // ───────────────────────── State ─────────────────────────
 
         private readonly List<Node> _nodesUp = new List<Node>();
@@ -219,6 +296,8 @@ namespace cAlgo.Indicators
         private readonly List<double> _densityPrices = new List<double>();
         private readonly List<bool> _densityIsUp = new List<bool>();
         private readonly List<DateTime> _densityLabelTimes = new List<DateTime>();
+        private readonly List<double> _stagLabelPrices = new List<double>();
+        private readonly List<DateTime> _stagLabelTimes = new List<DateTime>();
 
         private int _objSeq;
         private string _lastDrawSignature;
@@ -240,6 +319,10 @@ namespace cAlgo.Indicators
 
         private int _redDensityCount;
         private int _yellowDensityCount;
+        private int _fvgBullCount;
+        private int _fvgBearCount;
+        private int _fvgBullMitigated;
+        private int _fvgBearMitigated;
         private Bars _dailyBars;
 
         private const string ObjectPrefix = "NCT_";
@@ -353,6 +436,8 @@ namespace cAlgo.Indicators
                 _densityPrices.Clear();
                 _densityIsUp.Clear();
                 _densityLabelTimes.Clear();
+                _stagLabelPrices.Clear();
+                _stagLabelTimes.Clear();
                 _redDensityCount = 0;
                 _yellowDensityCount = 0;
                 _objSeq = 0;
@@ -384,11 +469,22 @@ namespace cAlgo.Indicators
                     }
                 }
 
-                if (ShowDayOpenTarget || ShowDayCloseTarget)
+                if (ShowDayOpenTarget || ShowDayCloseTarget || ShowDayOcPanel)
                     DrawingDayOpenClose();
 
                 if (ShowAsiaSession)
                     DrawingAsiaSession();
+
+                if (EnableRoundTargets)
+                {
+                    if (RoundApplyUp)
+                        DrawingRoundNumberTargets(true);
+                    if (RoundApplyDown)
+                        DrawingRoundNumberTargets(false);
+                }
+
+                if (EnableFvg)
+                    DrawingFairValueGaps();
 
                 if (EnableDensity)
                     DrawDensityClusters();
@@ -418,9 +514,15 @@ namespace cAlgo.Indicators
             _densityPrices.Clear();
             _densityIsUp.Clear();
             _densityLabelTimes.Clear();
+            _stagLabelPrices.Clear();
+            _stagLabelTimes.Clear();
             _objSeq = 0;
             _redDensityCount = 0;
             _yellowDensityCount = 0;
+            _fvgBullCount = 0;
+            _fvgBearCount = 0;
+            _fvgBullMitigated = 0;
+            _fvgBearMitigated = 0;
             // Keep draw-cache (_lastDrawSignature / bar index / live OHLC) so a mid-rebuild
             // return does not force a full redraw on the next tick.
 
@@ -606,11 +708,22 @@ namespace cAlgo.Indicators
             return isUp ? origin + move : origin - move;
         }
 
+        // Pine: node calc may be linear, but plotted targets are always logarithmic.
+        private double TargetAbsMove(double from, double to)
+        {
+            return Math.Abs(SafeLog(to) - SafeLog(from));
+        }
+
+        private double TargetProject(double origin, double move, bool isUp)
+        {
+            return isUp
+                ? Math.Exp(SafeLog(origin) + move)
+                : Math.Exp(SafeLog(origin) - move);
+        }
+
         private double AlongPath(double start, double end, double ratio)
         {
-            if (SwCalcLogarithm)
-                return Math.Exp(SafeLog(start) + ratio * (SafeLog(end) - SafeLog(start)));
-            return start + ratio * (end - start);
+            return Math.Exp(SafeLog(start) + ratio * (SafeLog(end) - SafeLog(start)));
         }
 
         // ───────────────────────── Symmetry ─────────────────────────
@@ -1423,6 +1536,14 @@ namespace cAlgo.Indicators
               .Append(EnableDensity).Append('|')
               .Append(ShowDayOpenTarget).Append('|')
               .Append(ShowDayCloseTarget).Append('|')
+              .Append(ShowDayOcPanel).Append('|')
+              .Append(EnableRoundTargets).Append('|')
+              .Append(RoundBasePrice.ToString("R")).Append('|')
+              .Append(EnableFvg).Append('|')
+              .Append(FvgExtend).Append('|')
+              .Append(FvgThresholdPer.ToString("R")).Append('|')
+              .Append(LabelCollisionTolerancePct.ToString("R")).Append('|')
+              .Append(LabelStaggerStep).Append('|')
               .Append(SwCalcLogarithm).Append('|')
               .Append(SwCalcSymmetry).Append('|')
               .Append(ShowStarSuffix).Append('|')
@@ -1708,13 +1829,13 @@ namespace cAlgo.Indicators
                 Color lineColor = WithTransparency(colorByNode[i]);
                 Color labelColor = colorByNode[i];
 
-                double moveSize = AbsMove(node.LowPreNode, node.HighNode);
-                double correctionSize = AbsMove(node.LowCorrection, node.HighNode);
+                double moveSize = TargetAbsMove(node.LowPreNode, node.HighNode);
+                double correctionSize = TargetAbsMove(node.LowCorrection, node.HighNode);
                 DateTime startTime = TimeAtIndex(node.IndexNode);
 
                 if (ShowDouble)
                 {
-                    double price = Project(node.HighNode, moveSize, swUptrendType);
+                    double price = TargetProject(node.HighNode, moveSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
@@ -1730,12 +1851,13 @@ namespace cAlgo.Indicators
                     bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
                     if (!hasRelatedNode2)
                     {
-                        double doublePrice = Project(node.HighNode, moveSize, swUptrendType);
+                        double doublePrice = TargetProject(node.HighNode, moveSize, swUptrendType);
                         double price = AlongPath(node.LowPreNode, doublePrice, Double086Ratio);
 
                         if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                         {
-                            DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
+                            DrawTargetLine(startTime, endTime, price, lineColor, Double086LineWidth,
+                                ParseLineStyle(Double086LineStyleName),
                                 trendPrefix + "D " + Double086Ratio.ToString("0.##"), labelColor);
                             RegisterDensity(price, swUptrendType, endTime);
                         }
@@ -1744,7 +1866,7 @@ namespace cAlgo.Indicators
 
                 if (ShowMin)
                 {
-                    double price = Project(node.LowCorrection, moveSize, swUptrendType);
+                    double price = TargetProject(node.LowCorrection, moveSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
                     {
@@ -1756,7 +1878,7 @@ namespace cAlgo.Indicators
 
                 if (ShowCorrection)
                 {
-                    double price = Project(node.HighNode, correctionSize, swUptrendType);
+                    double price = TargetProject(node.HighNode, correctionSize, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
@@ -1809,11 +1931,11 @@ namespace cAlgo.Indicators
                 Color lineColor = WithTransparency(colorByNode[i]);
                 Color labelColor = colorByNode[i];
 
-                double totalMove = AbsMove(node1.LowPreNode, node2.HighNode);
+                double totalMove = TargetAbsMove(node1.LowPreNode, node2.HighNode);
 
                 if (ShowPairMin)
                 {
-                    double price = Project(node1.LowCorrection, totalMove, swUptrendType);
+                    double price = TargetProject(node1.LowCorrection, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node1.IndexCorrection, swUptrendType))
                     {
@@ -1825,7 +1947,7 @@ namespace cAlgo.Indicators
 
                 if (ShowPairMax)
                 {
-                    double price = Project(node2.LowCorrection, totalMove, swUptrendType);
+                    double price = TargetProject(node2.LowCorrection, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexCorrection, swUptrendType))
                     {
@@ -1837,7 +1959,7 @@ namespace cAlgo.Indicators
 
                 if (ShowPairDouble)
                 {
-                    double price = Project(node2.HighNode, totalMove, swUptrendType);
+                    double price = TargetProject(node2.HighNode, totalMove, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
                     {
@@ -1849,8 +1971,8 @@ namespace cAlgo.Indicators
 
                 if (ShowPairCorrection)
                 {
-                    double correctionSize2 = AbsMove(node2.LowCorrection, node2.HighNode);
-                    double price = Project(node2.HighNode, correctionSize2, swUptrendType);
+                    double correctionSize2 = TargetAbsMove(node2.LowCorrection, node2.HighNode);
+                    double price = TargetProject(node2.HighNode, correctionSize2, swUptrendType);
 
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
                     {
@@ -1862,12 +1984,53 @@ namespace cAlgo.Indicators
             }
         }
 
+        private TimeSpan AverageBarDuration()
+        {
+            if (Bars.Count >= 2)
+            {
+                TimeSpan d = Bars.OpenTimes[Bars.Count - 1] - Bars.OpenTimes[Bars.Count - 2];
+                if (d > TimeSpan.Zero)
+                    return d;
+            }
+            return TimeSpan.FromMinutes(1);
+        }
+
+        private DateTime StaggerLabelTime(DateTime preferred, double price)
+        {
+            DateTime t = preferred;
+            TimeSpan step = TimeSpan.FromTicks(AverageBarDuration().Ticks * Math.Max(2, LabelStaggerStep));
+            int guard = 0;
+            while (guard < 40)
+            {
+                bool collision = false;
+                for (int i = 0; i < _stagLabelPrices.Count; i++)
+                {
+                    if (Math.Abs((_stagLabelTimes[i] - t).TotalSeconds) > 1)
+                        continue;
+                    double p = _stagLabelPrices[i];
+                    double refP = Math.Max(Math.Abs(p), 1e-7);
+                    if (Math.Abs(p - price) / refP * 100.0 <= LabelCollisionTolerancePct)
+                    {
+                        collision = true;
+                        break;
+                    }
+                }
+                if (!collision)
+                    break;
+                t = t.Add(step);
+                guard++;
+            }
+            _stagLabelPrices.Add(price);
+            _stagLabelTimes.Add(t);
+            return t;
+        }
+
         private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
             int width, LineStyle style, string label, Color labelColor)
         {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
-            DateTime labelTime = TargetLabelTime(startTime, endTime);
+            DateTime labelTime = StaggerLabelTime(TargetLabelTime(startTime, endTime), price);
             var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, price, labelColor);
             txt.FontSize = TargetFontSizeValue();
             txt.VerticalAlignment = VerticalAlignment.Center;
@@ -1907,6 +2070,26 @@ namespace cAlgo.Indicators
                     DrawTargetLine(startTime, endTime, closeYesterday, Color.Red, 2, LineStyle.Dots,
                         "L Day Close", Color.Red);
                     RegisterDensity(closeYesterday, false, endTime);
+                }
+            }
+
+            if (ShowDayOcPanel && _dailyBars.Count >= 2)
+            {
+                double openToday = _dailyBars.LastBar.Open;
+                double closeYesterday = _dailyBars[_dailyBars.Count - 2].Close;
+                if (openToday > 0 && closeYesterday > 0
+                    && !double.IsNaN(openToday) && !double.IsNaN(closeYesterday))
+                {
+                    double boxTop = Math.Max(openToday, closeYesterday);
+                    double boxBot = Math.Min(openToday, closeYesterday);
+                    Color fill = Color.FromArgb(40, 30, 80, 180);
+                    var box = Chart.DrawRectangle(NextName("OcBox"), startTime, boxTop, endTime, boxBot, fill);
+                    box.IsFilled = true;
+                    DateTime lblT = StaggerLabelTime(endTime, boxTop);
+                    var lbl = Chart.DrawText(NextName("OcLbl"), "OC Panel", lblT, boxTop, Color.White);
+                    lbl.FontSize = 8;
+                    lbl.HorizontalAlignment = HorizontalAlignment.Left;
+                    lbl.VerticalAlignment = VerticalAlignment.Top;
                 }
             }
         }
@@ -2057,6 +2240,185 @@ namespace cAlgo.Indicators
             }
         }
 
+        private Color ColorWithAlphaPct(Color baseColor, int transparency)
+        {
+            int t = transparency;
+            if (t < 0) t = 0;
+            if (t > 100) t = 100;
+            int alpha = (100 - t) * 255 / 100;
+            return Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B);
+        }
+
+        private void DrawingRoundNumberTargets(bool isUp)
+        {
+            if (RoundBasePrice <= 0 || Bars == null || Bars.Count < 2)
+                return;
+
+            int lastIndex = Bars.Count - 1;
+            int lookback = Math.Min(Math.Max(StartPoint, 1), lastIndex);
+            int from = Math.Max(0, lastIndex - lookback);
+            double chartLow = Bars.LowPrices[from];
+            double chartHigh = Bars.HighPrices[from];
+            for (int i = from + 1; i <= lastIndex; i++)
+            {
+                if (Bars.LowPrices[i] < chartLow)
+                    chartLow = Bars.LowPrices[i];
+                if (Bars.HighPrices[i] > chartHigh)
+                    chartHigh = Bars.HighPrices[i];
+            }
+
+            double effectiveMin = RoundMinVisiblePrice > 0 ? Math.Max(RoundMinVisiblePrice, chartLow) : chartLow;
+            double effectiveMax = chartHigh;
+            int startMult = (int)Math.Floor(effectiveMin / RoundBasePrice);
+            int endMult = (int)Math.Ceiling(effectiveMax / RoundBasePrice);
+            if (startMult < 1)
+                startMult = 1;
+            if (endMult < startMult)
+                return;
+
+            const int maxLevels = 40;
+            int totalLevels = endMult - startMult + 1;
+            if (totalLevels > maxLevels)
+            {
+                int mid = (startMult + endMult) / 2;
+                int half = maxLevels / 2;
+                startMult = Math.Max(1, mid - half);
+                endMult = startMult + maxLevels - 1;
+            }
+
+            DateTime startTime = Bars.OpenTimes[lastIndex];
+            DateTime endTime = TimeAtIndex(lastIndex + TargetGapBars);
+            Color lineColor = ColorWithAlphaPct(ParseColor(RoundLineColorName, Color.Gray), RoundLineTransparency);
+            Color labelColor = ParseColor(RoundLineColorName, Color.Gray);
+            LineStyle style = ParseLineStyle(RoundLineStyleName);
+            string prefix = isUp ? "H RN " : "L RN ";
+
+            for (int mult = startMult; mult <= endMult; mult++)
+            {
+                double roundPrice = RoundBasePrice * mult;
+                DrawTargetLine(startTime, endTime, roundPrice, lineColor, RoundLineWidth, style,
+                    prefix + roundPrice.ToString("0.####"), labelColor);
+            }
+        }
+
+        private void DrawingFairValueGaps()
+        {
+            if (Bars == null || Bars.Count < 4)
+                return;
+
+            int lastIndex = Bars.Count - 1;
+            double autoCum = 0;
+            int autoN = 0;
+            var born = new List<int>();
+            var mx = new List<double>();
+            var mn = new List<double>();
+            var isBull = new List<bool>();
+
+            for (int i = 2; i <= lastIndex; i++)
+            {
+                double hi = Bars.HighPrices[i];
+                double lo = Bars.LowPrices[i];
+                if (lo > 0)
+                {
+                    autoCum += (hi - lo) / lo;
+                    autoN++;
+                }
+
+                double thr = FvgAutoThreshold
+                    ? (autoN > 0 ? autoCum / autoN : 0.0)
+                    : FvgThresholdPer / 100.0;
+
+                double hi2 = Bars.HighPrices[i - 2];
+                double lo2 = Bars.LowPrices[i - 2];
+                double close1 = Bars.ClosePrices[i - 1];
+
+                bool bull = lo > hi2 && close1 > hi2 && hi2 > 0 && (lo - hi2) / hi2 > thr;
+                bool bear = hi < lo2 && close1 < lo2 && hi > 0 && (lo2 - hi) / hi > thr;
+                if (bull)
+                {
+                    born.Add(i);
+                    mx.Add(lo);
+                    mn.Add(hi2);
+                    isBull.Add(true);
+                    _fvgBullCount++;
+                }
+                else if (bear)
+                {
+                    born.Add(i);
+                    mx.Add(lo2);
+                    mn.Add(hi);
+                    isBull.Add(false);
+                    _fvgBearCount++;
+                }
+            }
+
+            Color bullCss = ParseColor(FvgBullColorName, Color.FromArgb(180, 8, 153, 129));
+            Color bearCss = ParseColor(FvgBearColorName, Color.FromArgb(180, 242, 54, 69));
+            Color bullFill = Color.FromArgb(70, bullCss.R, bullCss.G, bullCss.B);
+            Color bearFill = Color.FromArgb(70, bearCss.R, bearCss.G, bearCss.B);
+
+            var aliveIdx = new List<int>();
+            for (int g = 0; g < born.Count; g++)
+            {
+                int b = born[g];
+                double top = mx[g];
+                double bot = mn[g];
+                bool mitigated = false;
+                int mitBar = lastIndex;
+                for (int i = b + 1; i <= lastIndex; i++)
+                {
+                    if (Bars.HighPrices[i] >= bot && Bars.LowPrices[i] <= top)
+                    {
+                        mitigated = true;
+                        mitBar = i;
+                        break;
+                    }
+                }
+
+                if (mitigated)
+                {
+                    if (isBull[g])
+                        _fvgBullMitigated++;
+                    else
+                        _fvgBearMitigated++;
+
+                    if (FvgMitigationLevels)
+                    {
+                        double y = isBull[g] ? bot : top;
+                        Chart.DrawTrendLine(NextName("FvgMit"),
+                            Bars.OpenTimes[ClampIndex(b - 2)], y,
+                            Bars.OpenTimes[mitBar], y,
+                            isBull[g] ? bullCss : bearCss, 1, LineStyle.Dots);
+                    }
+                    continue;
+                }
+
+                aliveIdx.Add(g);
+                int right = Math.Max(lastIndex, b + FvgExtend);
+                DateTime t1 = Bars.OpenTimes[ClampIndex(b - 2)];
+                DateTime t2 = TimeAtIndex(right);
+                Color fill = isBull[g] ? bullFill : bearFill;
+                var rect = Chart.DrawRectangle(NextName("Fvg"), t1, top, t2, bot, fill);
+                rect.IsFilled = true;
+                rect.Color = fill;
+                rect.Thickness = 1;
+            }
+
+            if (FvgShowLast > 0 && aliveIdx.Count > 0)
+            {
+                int take = Math.Min(FvgShowLast, aliveIdx.Count);
+                for (int k = 0; k < take; k++)
+                {
+                    int g = aliveIdx[aliveIdx.Count - 1 - k];
+                    double lvl = isBull[g] ? mn[g] : mx[g];
+                    Color col = isBull[g] ? bullCss : bearCss;
+                    Chart.DrawTrendLine(NextName("FvgLvl"),
+                        Bars.OpenTimes[ClampIndex(born[g] - 2)], lvl,
+                        Bars.OpenTimes[lastIndex], lvl, col, 1, LineStyle.Solid);
+                }
+            }
+        }
+
         // ───────────────────────── Density ─────────────────────────
 
         private void DrawDensityClusters()
@@ -2145,6 +2507,16 @@ namespace cAlgo.Indicators
                 "\nYellow ● " + _yellowDensityCount +
                 "\nUp Nodes " + _nodesUp.Count +
                 "\nDn Nodes " + _nodesDown.Count;
+            if (EnableFvg && FvgShowDash)
+            {
+                double bullMitPct = _fvgBullCount > 0 ? _fvgBullMitigated * 100.0 / _fvgBullCount : 0.0;
+                double bearMitPct = _fvgBearCount > 0 ? _fvgBearMitigated * 100.0 / _fvgBearCount : 0.0;
+                text +=
+                    "\nFVG Bull " + _fvgBullCount +
+                    "\nFVG Bear " + _fvgBearCount +
+                    "\nFVG Bull Mit " + bullMitPct.ToString("0.##") + "%" +
+                    "\nFVG Bear Mit " + bearMitPct.ToString("0.##") + "%";
+            }
 
             Chart.DrawStaticText(StatsName, text, VerticalAlignment.Top, HorizontalAlignment.Right, Color.White);
         }
