@@ -1582,9 +1582,9 @@ drawMapWeeklyLevel(float price, string labelText, color col, int width, string s
         lnStyle = dayOcStyleFromString(styleStr)
         trackLine(line.new(startIdx, price, endIdx, price, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawLabel()
-            // لیبل در انتهای خط؛ مثل تارگت‌های دیگر با پیشوند WEEKLINE
+            // لیبل در انتهای خط؛ فقط W.L
             int lblX = getStaggerX(price, endIdx)
-            trackLabel(label.new(x = lblX, y = price, text = "WEEKLINE " + labelText, style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+            trackLabel(label.new(x = lblX, y = price, text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
