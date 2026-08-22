@@ -768,6 +768,53 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             trackLabel(cLbl)
 
 // ================================================================================================
+// تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
+// ================================================================================================
+method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, int node2Width, string node2Style, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency) =>
+    array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
+    trendPrefix = swUptrendType ? "H " : "L "
+    countNodes = nodesRef.size()
+    lnStyleNode2 = node2Style == 'Solid' ? line.style_solid : node2Style == 'Dashed' ? line.style_dashed : line.style_dotted
+
+    colorPerIndex = this.computeNodeColors(nodesRef)
+
+    array<bool> qualifies = array.new<bool>(countNodes)
+    qualifyingTotal = 0
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            node = nodesRef.get(i)
+            isQualified = node.numberNode == 2
+            qualifies.set(i, isQualified)
+            if isQualified
+                qualifyingTotal += 1
+
+    skipCount = math.max(qualifyingTotal - maxCount, 0)
+    seen = 0
+    if countNodes > 0 and showNode2
+        for i = 0 to countNodes - 1
+            if qualifies.get(i)
+                seen += 1
+                if seen > skipCount
+                    if not canDrawLine() or not canDrawLabel()
+                        break
+                    node = nodesRef.get(i)
+                    lineColor = colorPerIndex.get(i)
+                    // اندازه حرکت نود ۲
+                    moveSizeLog2 = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
+                    // از انتهای اصلاح نود ۲ در جهت نود ۲
+                    targetNode2Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog2) : math.exp(math.log(node.lowCorrection) - moveSizeLog2)
+
+                    bool shouldDelete = shouldDeleteHitTarget(targetNode2Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+
+                    if not shouldDelete
+                        n2First  = chart.point.from_index(node.indexCorrection, targetNode2Price)
+                        n2Second = chart.point.from_index(bar_index + gapBars, targetNode2Price)
+                        trackLine(line.new(n2First, n2Second, color = color.new(lineColor, lineTransparency), width = node2Width, style = lnStyleNode2))
+                        midX = (node.indexCorrection + bar_index + gapBars) / 2
+                        n2Lbl = label.new(x = midX, y = targetNode2Price, text = trendPrefix + "Node 2", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
+                        trackLabel(n2Lbl)
+
+// ================================================================================================
 // تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
 // ================================================================================================
 method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMin, bool showMax, bool showDouble, bool showCorrection, int minWidth, int maxWidth, int doubleWidth, int correctionWidth, string minStyle, string maxStyle, string doubleStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency) =>
@@ -946,6 +993,7 @@ showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star
 
 var GRP5 = "Node Targets — Master Switches"
 enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + Double0.86 + Min + Correction)', group = GRP5)
+enableSingleNode2Targets = input.bool(true, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
 showTargetNode1Down = input.bool(true, 'Apply to Down Trend', inline = "trend1", group = GRP5)
@@ -984,6 +1032,12 @@ targetDouble086Style  = input.string('Dotted', 'Target Double 0.86 Line Style', 
 targetMinStyle        = input.string('Solid', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetCorrectionStyle = input.string('Dashed', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetNode1MaxCount = input.int(20, 'Number of Last Nodes to Target', minval = 1, maxval = 500, group = GRP6)
+
+var GRP6B = "Node 2 Target (Single)"
+showTargetNode2Input = input.bool(true, 'Show Target Node 2 (move from correction end)', group = GRP6B, tooltip = 'اندازه حرکت نود ۲ را بگیر؛ از انتهای اصلاح نود ۲ به اندازه همان حرکت در جهت نود ۲ برو')
+targetNode2Width = input.int(2, 'Target Node 2 Line Width', minval = 1, maxval = 4, group = GRP6B)
+targetNode2Style = input.string('Solid', 'Target Node 2 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6B)
+targetNode2MaxCount = input.int(20, 'Number of Last Node 2 to Target', minval = 1, maxval = 500, group = GRP6B)
 
 var GRP7 = "Node 1+2 Pair Targets (Min / Max / Double / Correction)"
 showPairMinInput    = input.bool(true, 'Show Target Min (from Node1 correction end)', group = GRP7)
@@ -1096,6 +1150,12 @@ if bar_index == last_bar_index
             cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
         if showTargetNode1Down
             cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio)
+
+    if enableSingleNode2Targets
+        if showTargetNode1Up
+            cTarget.drawingTargetsNode2(true,  showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+        if showTargetNode1Down
+            cTarget.drawingTargetsNode2(false, showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
 
     if enablePairNode12Targets
         if showTargetNode1Up
