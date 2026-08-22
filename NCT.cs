@@ -41,7 +41,7 @@ namespace cAlgo.Indicators
         [Parameter("Font Size (Node Numbers)", DefaultValue = "Normal", Group = "Visual Customization")]
         public string TextNodeSize { get; set; }
 
-        [Parameter("Font Size (Target Labels)", DefaultValue = 8, MinValue = 4, MaxValue = 24, Group = "Visual Customization")]
+        [Parameter("Target Font Size", DefaultValue = 10, MinValue = 1, MaxValue = 72, Group = "Visual Customization")]
         public int TargetLabelFontSize { get; set; }
 
         [Parameter("Color 1", DefaultValue = "#FFE566", Group = "Visual Customization")]
@@ -1531,7 +1531,7 @@ namespace cAlgo.Indicators
 
         private int TargetFontSizeValue()
         {
-            return Math.Max(4, Math.Min(TargetLabelFontSize, 24));
+            return Math.Max(1, Math.Min(TargetLabelFontSize, 72));
         }
 
         private static int ParseFontSize(string sizeName, int fallback)
@@ -2123,7 +2123,7 @@ namespace cAlgo.Indicators
                     box.IsFilled = true;
                     DateTime lblT = StaggerLabelTime(endTime, boxTop);
                     var lbl = Chart.DrawText(NextName("OcLbl"), "OC Panel", lblT, boxTop, Color.White);
-                    lbl.FontSize = 8;
+                    lbl.FontSize = TargetFontSizeValue();
                     lbl.HorizontalAlignment = HorizontalAlignment.Left;
                     lbl.VerticalAlignment = VerticalAlignment.Top;
                 }
@@ -2232,7 +2232,7 @@ namespace cAlgo.Indicators
 
                     DateTime midT = new DateTime(t1.Ticks + (t2.Ticks - t1.Ticks) / 2, t1.Kind);
                     var txt = Chart.DrawText(NextName("AsiaLbl"), label, midT, box.High, asiaYellow);
-                    txt.FontSize = 8;
+                    txt.FontSize = TargetFontSizeValue();
                     txt.VerticalAlignment = VerticalAlignment.Top;
                     txt.HorizontalAlignment = HorizontalAlignment.Center;
                 }
