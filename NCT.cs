@@ -219,10 +219,10 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Label Anti-Overlap ─────────────────────────
 
-        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.05, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
+        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.08, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
         public double LabelCollisionTolerancePct { get; set; }
 
-        [Parameter("Label Stagger Step (bars)", DefaultValue = 18, MinValue = 2, MaxValue = 200, Group = "Target Label Anti-Overlap")]
+        [Parameter("Label Stagger Step (bars)", DefaultValue = 24, MinValue = 2, MaxValue = 200, Group = "Target Label Anti-Overlap")]
         public int LabelStaggerStep { get; set; }
 
         // ───────────────────────── Round Numbers ─────────────────────────
@@ -2033,31 +2033,69 @@ namespace cAlgo.Indicators
             return TimeSpan.FromMinutes(1);
         }
 
+        private bool PricesCloseForLabel(double a, double b)
+        {
+            double refP = Math.Max(Math.Max(Math.Abs(a), Math.Abs(b)), 1e-7);
+            if (Math.Abs(a - b) / refP * 100.0 <= LabelCollisionTolerancePct)
+                return true;
+
+            double top = Chart.TopY;
+            double bot = Chart.BottomY;
+            int height = Chart.Height;
+            double range = Math.Abs(top - bot);
+            if (height < 2 || range < 1e-12)
+                return false;
+
+            double dyPx = Math.Abs(a - b) / range * height;
+            return dyPx <= TargetFontSizeValue() * 1.5;
+        }
+
         private DateTime StaggerLabelTime(DateTime preferred, double price)
         {
+            return StaggerLabelTime(preferred, price, DateTime.MaxValue);
+        }
+
+        private DateTime StaggerLabelTime(DateTime preferred, double price, DateTime lineEnd)
+        {
             DateTime t = preferred;
-            TimeSpan step = TimeSpan.FromTicks(AverageBarDuration().Ticks * Math.Max(2, LabelStaggerStep));
+            TimeSpan bar = AverageBarDuration();
+            int stepBars = Math.Max(4, LabelStaggerStep);
+            TimeSpan step = TimeSpan.FromTicks(bar.Ticks * stepBars);
+            // Centered text occupies several bars; bigger fonts need a wider exclusive slot.
+            int occupyBars = Math.Max(stepBars, 8 + TargetFontSizeValue());
+            long occupyTicks = bar.Ticks * occupyBars;
+
+            DateTime maxT = lineEnd;
+            if (maxT < preferred || maxT == DateTime.MaxValue)
+                maxT = preferred.Add(TimeSpan.FromTicks(bar.Ticks * Math.Max(80, stepBars * 8)));
+
             int guard = 0;
-            while (guard < 40)
+            while (guard < 48)
             {
+                DateTime pushTo = t;
                 bool collision = false;
                 for (int i = 0; i < _stagLabelPrices.Count; i++)
                 {
-                    if (Math.Abs((_stagLabelTimes[i] - t).TotalSeconds) > 1)
+                    if (!PricesCloseForLabel(_stagLabelPrices[i], price))
                         continue;
-                    double p = _stagLabelPrices[i];
-                    double refP = Math.Max(Math.Abs(p), 1e-7);
-                    if (Math.Abs(p - price) / refP * 100.0 <= LabelCollisionTolerancePct)
-                    {
-                        collision = true;
-                        break;
-                    }
+                    long dt = Math.Abs((_stagLabelTimes[i] - t).Ticks);
+                    if (dt >= occupyTicks)
+                        continue;
+                    collision = true;
+                    DateTime next = _stagLabelTimes[i].Add(step);
+                    if (next > pushTo)
+                        pushTo = next;
                 }
                 if (!collision)
                     break;
-                t = t.Add(step);
+                if (pushTo <= t)
+                    pushTo = t.Add(step);
+                t = pushTo > maxT ? maxT : pushTo;
+                if (t >= maxT)
+                    break;
                 guard++;
             }
+
             _stagLabelPrices.Add(price);
             _stagLabelTimes.Add(t);
             return t;
@@ -2068,7 +2106,10 @@ namespace cAlgo.Indicators
         {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
-            DateTime labelTime = StaggerLabelTime(TargetLabelTime(startTime, endTime), price);
+            DateTime midTime = TargetLabelTime(startTime, endTime);
+            TimeSpan extra = TimeSpan.FromTicks(AverageBarDuration().Ticks * Math.Max(4, LabelStaggerStep) * 4);
+            DateTime labelMax = endTime + extra;
+            DateTime labelTime = StaggerLabelTime(midTime, price, labelMax);
             var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, price, labelColor);
             txt.FontSize = TargetFontSizeValue();
             txt.VerticalAlignment = VerticalAlignment.Center;
