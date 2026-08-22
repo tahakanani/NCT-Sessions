@@ -1453,6 +1453,16 @@ line_length_factor_other = input.int(10, 'Line Length Factor (Other TF)', minval
 showDayOCBox = input.bool(true, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
 dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = GRP_DAYOC)
 
+var GRP_TIMETGT = "Time Targets (Vertical)"
+enableTimeTargets = input.bool(true, 'Show Time Targets', group = GRP_TIMETGT, tooltip = 'خطوط عمودی تایم‌های روز جاری (صبح تا شب) بر اساس تایم‌زون سشن‌ها')
+timeTargetsCsv = input.string('01:30,02:30,03:00,04:00,07:00,08:00,09:00,10:00,12:00,13:00,15:30,16:30,18:00,20:00,21:00,23:00', 'Times (HH:MM, comma-separated)', group = GRP_TIMETGT, tooltip = 'لیست تایم‌ها با کاما؛ فقط برای روز جاری رسم می‌شود')
+timeTargetColor = input.color(color.new(#78909c, 0), 'Line Color', inline = 'tt_col', group = GRP_TIMETGT)
+timeTargetWidth = input.int(1, 'Line Width', minval = 1, maxval = 5, inline = 'tt_col', group = GRP_TIMETGT)
+timeTargetStyle = input.string('Dashed', 'Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'tt_st', group = GRP_TIMETGT)
+timeTargetTransparency = input.int(40, 'Line Transparency', minval = 0, maxval = 100, inline = 'tt_st', group = GRP_TIMETGT)
+showTimeTargetLabels = input.bool(true, 'Show Time Labels', group = GRP_TIMETGT)
+timeTargetLabelSize = input.string('Tiny', 'Label Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_TIMETGT)
+
 dayOcStyleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
@@ -1760,7 +1770,35 @@ if bar_index == last_bar_index
         ocLbl = label.new(x = getStaggerX(boxTop, bar_index + targetLabelGapBars), y = boxTop, text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
         trackLabel(ocLbl)
 
-
+    // تارگت‌های زمانی عمودی — فقط روز جاری (صبح تا شب)
+    if enableTimeTargets
+        int yToday = year(timenow, tz)
+        int mToday = month(timenow, tz)
+        int dToday = dayofmonth(timenow, tz)
+        ttLnStyle = dayOcStyleFromString(timeTargetStyle)
+        color ttCol = color.new(timeTargetColor, timeTargetTransparency)
+        float ttLabelY = high
+        array<string> ttParts = str.split(timeTargetsCsv, ',')
+        if ttParts.size() > 0
+            for ti = 0 to ttParts.size() - 1
+                string rawT = str.replace_all(str.trim(ttParts.get(ti)), ' ', '')
+                if str.length(rawT) >= 4
+                    array<string> hm = str.split(rawT, ':')
+                    if hm.size() >= 2
+                        float hhF = str.tonumber(hm.get(0))
+                        float mmF = str.tonumber(hm.get(1))
+                        if not na(hhF) and not na(mmF)
+                            int hh = int(hhF)
+                            int mm = int(mmF)
+                            if hh >= 0 and hh <= 23 and mm >= 0 and mm <= 59
+                                int ts = timestamp(tz, yToday, mToday, dToday, hh, mm, 0)
+                                if not na(ts) and canDrawLine()
+                                    line ttLn = line.new(x1 = ts, y1 = ttLabelY, x2 = ts, y2 = ttLabelY * 0.999, xloc = xloc.bar_time, extend = extend.both, color = ttCol, width = timeTargetWidth, style = ttLnStyle)
+                                    trackLine(ttLn)
+                                    if showTimeTargetLabels and canDrawLabel()
+                                        string lblTxt = (hh < 10 ? '0' : '') + str.tostring(hh) + ':' + (mm < 10 ? '0' : '') + str.tostring(mm)
+                                        label ttLbl = label.new(x = ts, y = ttLabelY, text = lblTxt, xloc = xloc.bar_time, style = label.style_label_down, color = color.new(color.black, 100), textcolor = ttCol, size = textSizeFromString(timeTargetLabelSize))
+                                        trackLabel(ttLbl)
 
 
 //#endregion
