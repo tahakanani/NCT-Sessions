@@ -724,8 +724,11 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             dLbl = label.new(x = midX, y = targetDoublePrice, text = trendPrefix + "Double 1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(dLbl)
 
-                    // Double 100% از قله؛ 1.5DOUBLE1 = 150% همان حرکت از قله نود ۱
-                    if showDouble15
+                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5 و 0.86 لازم نیستند
+                    bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
+
+                    // Double 100% از قله؛ 1.5DOUBLE1 = 150% همان حرکت — فقط وقتی هنوز نود ۲ نشده
+                    if showDouble15 and not hasNode2
                         targetDouble15Price = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog * double15Ratio) : math.exp(math.log(node.highNode) - moveSizeLog * double15Ratio)
 
                         bool shouldDelete15 = shouldDeleteHitTarget(targetDouble15Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
@@ -738,8 +741,6 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             d15Lbl = label.new(x = midX15, y = targetDouble15Price, text = trendPrefix + "1.5DOUBLE1", style = label.style_label_center, color = color.new(color.black, 100), textcolor = lineColor, size = textSizeFromString(targetLabelSize))
                             trackLabel(d15Lbl)
 
-                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت 0.86 دیگر لازم نیست
-                    bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
                     if showDouble086 and not hasNode2
                         // از ابتدای نود ۱ (lowPreNode) تا تارگت Double؛ نقطهٔ نسبت (پیش‌فرض 0.86)
                         float startNode1 = node.lowPreNode
@@ -1035,7 +1036,7 @@ roundMinVisiblePrice    = input.float(3000.0, 'Round Min Visible Price (0=auto)'
 
 var GRP6 = "Node 1 Targets (Single)"
 showTargetDoubleInput     = input.bool(true, 'Show Target Double (100% from node peak)', group = GRP6)
-showTargetDouble15Input   = input.bool(true, 'Show Target 1.5DOUBLE1 (150% from node peak)', group = GRP6, tooltip = 'همان Double نود ۱ با نسبت ۱.۵ از قله نود')
+showTargetDouble15Input   = input.bool(true, 'Show Target 1.5DOUBLE1 (150% from node peak)', group = GRP6, tooltip = 'همان Double نود ۱ با نسبت ۱.۵ از قله؛ وقتی نود ۲ تشکیل شود خودکار حذف می‌شود')
 double15Ratio             = input.float(1.5, '1.5DOUBLE1 Ratio', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب حرکت از قله نود ۱؛ پیش‌فرض ۱.۵ (= ۱۵۰٪)')
 showTargetDouble086Input  = input.bool(true, 'Show Target Double 0.86 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
 double086Ratio            = input.float(0.86, 'Start→Double Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۶')
