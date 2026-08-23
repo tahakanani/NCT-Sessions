@@ -536,7 +536,7 @@ var g_stagOtX     = array.new<int>()
 var GRP_LBL = "Target Label Anti-Overlap"
 targetLabelPriceTolerancePct = input.float(1.5, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.05, group = GRP_LBL, tooltip = 'اگر دو لیبل هم‌مسیر (صعود یا نزول) از نظر قیمت نزدیک باشند، یکی به راست جابه‌جا می‌شود')
 targetLabelStaggerStep = input.int(40, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'فاصلهٔ افقی هر لیبل متداخل به سمت راست')
-targetLabelYOffsetPct = input.float(0.12, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.01, group = GRP_LBL, tooltip = 'نوشته کمی بالاتر از خط تارگت قرار می‌گیرد تا خط از روی متن رد نشود')
+targetLabelYOffsetPct = input.float(0.01, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.01, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 // lane: 0 = صعود (H)، 1 = نزول (L)، 2 = سایر (سشن/MAP/Day)
