@@ -440,7 +440,7 @@ enterTrade(Setup s, float px) =>
         s.sl := rawSl
         float risk = includeThreshInRR ? s.entry - s.sl : s.entry - s.origin
         risk := math.max(risk, syminfo.mintick)
-        s.tpL2 := s.entry + s.spikeSize
+        s.tpL2 := s.entry + s.spikeSize * 0.9
         s.tp1 := s.entry + risk
         s.tp2 := s.entry + risk * rrRatio
     else
@@ -448,7 +448,7 @@ enterTrade(Setup s, float px) =>
         s.sl := rawSl
         float risk = includeThreshInRR ? s.sl - s.entry : s.origin - s.entry
         risk := math.max(risk, syminfo.mintick)
-        s.tpL2 := s.entry - s.spikeSize
+        s.tpL2 := s.entry - s.spikeSize * 0.9
         s.tp1 := s.entry - risk
         s.tp2 := s.entry - risk * rrRatio
     true
@@ -608,7 +608,7 @@ if bar_index > zzDepth
             ZzLeg zCorr = array.get(zzLegs, nzz - 2)
             ZzLeg zFirst = array.get(zzLegs, nzz - 3)
             if zLast.dir == zFirst.dir and zCorr.dir != zLast.dir
-                float size1 = math.abs(zFirst.y2 - zFirst.y1)
+                float size1 = math.abs(zFirst.y2 - zFirst.y1) * 0.9
                 float tgt = zLast.dir == 1 ? zLast.y1 + size1 : zLast.y1 - size1
                 color zc = fade(cssOf(zLast.dir), 0)
                 zzL2proj := line.new(zLast.x1, tgt, math.max(zLast.x2, bar_index), tgt, xloc.bar_index, extend.right, zc, line.style_dashed, 2)
