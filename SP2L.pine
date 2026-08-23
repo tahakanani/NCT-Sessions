@@ -4,18 +4,21 @@ indicator("SP2L (Spike – 2Leg – Level)", shorttitle = "SP2L", overlay = true
 
 // ================================================================================================
 // Inputs — Poursamadi method only
+// L1 = impulse. Correction has no box. L2 starts at correction end. One L2 per L1.
+// Same box height. SL = L1 start. Entry = correction end. TP1/TP2 = 1x / 2x L1.
+// If correction >= L1, delete that L1. Draw last N trading sessions only.
 // ================================================================================================
 
 grpLeg = "Leg Detection"
 showLegs = input.bool(true, "Show Legs", group = grpLeg)
 atrLen = input.int(14, "ATR Length", minval = 1, group = grpLeg)
-reversalPct = input.float(22.0, "Reversal % of Leg", minval = 10.0, maxval = 80.0, step = 1.0, group = grpLeg, tooltip = "پولبک کم‌عمق لگ را قطع نمی‌کند")
-minLegAtr = input.float(0.8, "Min Leg Size × ATR", minval = 0.2, step = 0.1, group = grpLeg)
-minLegPrice = input.float(4.0, "Min Leg Size (Price)", minval = 0.0, step = 0.5, group = grpLeg, tooltip = "طلا ۱دقیقه: ۴ تا ۸")
-minReversalAtr = input.float(0.35, "Min Reversal × ATR", minval = 0.1, step = 0.05, group = grpLeg)
-minLegBars = input.int(3, "Min Leg Bars", minval = 2, maxval = 120, group = grpLeg)
-corrEndPct = input.float(18.0, "Correction End %", minval = 5.0, maxval = 50.0, step = 1.0, group = grpLeg)
-corrEndAtr = input.float(0.35, "Correction End × ATR", minval = 0.1, step = 0.05, group = grpLeg)
+reversalPct = input.float(18.0, "Reversal % of Leg", minval = 8.0, maxval = 80.0, step = 1.0, group = grpLeg, tooltip = "تأیید لگ وقتی قیمت از اکستریم برگردد")
+minLegAtr = input.float(0.55, "Min Leg Size × ATR", minval = 0.15, step = 0.05, group = grpLeg)
+minLegPrice = input.float(1.5, "Min Leg Size (Price)", minval = 0.0, step = 0.5, group = grpLeg, tooltip = "طلا ۱دقیقه: ۱٫۵ تا ۴")
+minReversalAtr = input.float(0.22, "Min Reversal × ATR", minval = 0.05, step = 0.05, group = grpLeg)
+minLegBars = input.int(2, "Min Leg Bars", minval = 1, maxval = 120, group = grpLeg)
+corrEndPct = input.float(12.0, "Correction End %", minval = 5.0, maxval = 50.0, step = 1.0, group = grpLeg)
+corrEndAtr = input.float(0.22, "Correction End × ATR", minval = 0.05, step = 0.05, group = grpLeg)
 minCorrBars = input.int(2, "Min Correction Bars", minval = 1, maxval = 20, group = grpLeg)
 lookbackDays = input.int(3, "Lookback Days", minval = 1, maxval = 15, group = grpLeg, tooltip = "فقط لگ‌های این تعداد روز معاملاتی آخر")
 maxLegsKeep = input.int(20, "Max Legs Kept", minval = 4, maxval = 60, group = grpLeg)
@@ -30,11 +33,6 @@ showSp2lLevels = input.bool(true, "Show SL / Entry / TP1 / TP2", group = grpDisp
 // ================================================================================================
 // Types
 // ================================================================================================
-
-type ZzPt
-    int bar = 0
-    float px = na
-    bool isHigh = false
 
 type ZzLeg
     int dir = 0
@@ -67,10 +65,10 @@ type Sp2lDraw
     label lbT2 = na
     bool frozen = false
 
-var array<ZzPt> zzPts = array.new<ZzPt>()
 var array<ZzLeg> zzLegs = array.new<ZzLeg>()
 var array<Sp2lDraw> spPairs = array.new<Sp2lDraw>()
 var array<int> sessOpen = array.new<int>()
+var array<int> sessBars = array.new<int>()
 var label zzLiveLbl = na
 var box zzLiveBox = na
 var int zzDir = 0
@@ -93,7 +91,7 @@ legSpan(float y1, float y2) =>
     math.abs(y2 - y1)
 
 safeAtr(float atrNow) =>
-    na(atrNow) or atrNow <= 0 ? syminfo.mintick * 50.0 : atrNow
+    na(atrNow) or atrNow <= 0 ? math.max(syminfo.mintick * 50.0, 0.5) : atrNow
 
 needSize(float atrNow) =>
     math.max(safeAtr(atrNow) * minLegAtr, minLegPrice)
@@ -101,10 +99,12 @@ needSize(float atrNow) =>
 legSizeOk(float y1, float y2, float atrNow) =>
     legSpan(y1, y2) >= needSize(atrNow)
 
+// Pullback from extreme: percent of THIS swing OR a small ATR floor.
+// OR (not AND) so a normal 1-minute bounce can confirm a finished impulse.
 reversalEnough(float swing, float retr, float atrNow) =>
     float needPct = swing * reversalPct / 100.0
     float needAtr = safeAtr(atrNow) * minReversalAtr
-    swing > 0 and retr >= math.max(needPct, needAtr)
+    swing > 0 and (retr >= needPct or retr >= needAtr)
 
 pairBox(int x1, float yStart, int x2, float size, int dir, color c) =>
     float yEnd = dir == 1 ? yStart + size : yStart - size
@@ -176,15 +176,11 @@ eraseLegDraw(ZzLeg lg) =>
         lg.bx := na
     true
 
-barTime(int b) =>
-    int off = bar_index - b
-    off >= 0 and off <= bar_index ? time[off] : time
-
-windowStart() =>
-    array.size(sessOpen) > 0 ? array.get(sessOpen, 0) : time
-
+// Window = start bar of the oldest kept trading session.
+// Empty list ⇒ draw (script just started). Never compare to a stale na winBar.
 inLookback(int b) =>
-    barTime(b) >= windowStart()
+    int n = array.size(sessBars)
+    n <= 0 ? true : b >= array.get(sessBars, 0)
 
 clearPairsAt(int x0) =>
     if array.size(spPairs) > 0
@@ -210,16 +206,19 @@ removeL1(int idx) =>
 pruneOldDraws() =>
     int n = array.size(zzLegs)
     if n > 0
-        for i = 0 to n - 1
+        int i = n - 1
+        while i >= 0
             ZzLeg lg = array.get(zzLegs, i)
-            if not inLookback(lg.x1)
+            if not inLookback(lg.x2) and not inLookback(lg.x1)
                 eraseLegDraw(lg)
-                array.set(zzLegs, i, lg)
+                clearPairsAt(lg.x1)
+                array.remove(zzLegs, i)
+            i -= 1
     if array.size(spPairs) > 0
         int i = array.size(spPairs) - 1
         while i >= 0
             Sp2lDraw pr = array.get(spPairs, i)
-            if not inLookback(pr.x0)
+            if not inLookback(pr.xE) and not inLookback(pr.x0)
                 clearPairDraw(pr)
                 array.remove(spPairs, i)
             i -= 1
@@ -255,94 +254,85 @@ spawnL2(int l1i, int x1, float y1) =>
     int x2 = math.max(x1 + 1, bar_index)
     box bx = na
     label lb = na
-    if inLookback(x1)
+    // L2 is anchored at the end of the correction — draw if that bar is in the window.
+    if inLookback(x1) or inLookback(bar_index)
         bx := pairBox(x1, y1, x2, meas, dir, c)
         if showLegLabels
             lb := label.new(math.round(math.avg(x1, x2)), math.avg(y1, y2), "L2", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
     l1.hasPair := true
     array.set(zzLegs, l1i, l1)
     array.push(zzLegs, ZzLeg.new(dir, x1, x2, y1, y2, lb, bx, meas, "L2", true, false))
-    if inLookback(l1.x1)
+    if inLookback(l1.x1) or inLookback(x1)
         spawnLevels(dir, l1.x1, x1, l1.y1, y1, meas)
     trimZzLegs()
     true
 
 corrFinished(float swing, float retr, int bars, float atrNow) =>
-    bool bounce = retr >= swing * corrEndPct / 100.0 or (atrNow > 0 and retr >= atrNow * corrEndAtr)
+    bool bounce = retr >= swing * corrEndPct / 100.0 or retr >= safeAtr(atrNow) * corrEndAtr
     swing > 0 and bars >= minCorrBars and bounce
 
-redrawLastZzLeg() =>
-    int n = array.size(zzLegs)
-    int p = array.size(zzPts)
-    if n > 0 and p >= 2
-        ZzLeg lg = array.get(zzLegs, n - 1)
-        if lg.kind == "L1"
-            ZzPt a = array.get(zzPts, p - 2)
-            ZzPt b = array.get(zzPts, p - 1)
-            if not na(lg.lb)
-                label.set_xy(lg.lb, math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px))
-            if not na(lg.bx)
-                box.set_lefttop(lg.bx, a.bar, math.max(a.px, b.px))
-                box.set_rightbottom(lg.bx, b.bar, math.min(a.px, b.px))
+spawnL1(int dir, int x1, int x2, float y1, float y2, float meas) =>
+    color c = fade(cssOf(dir), 0)
+    box bx = na
+    label lb = na
+    // Draw if the impulse ends inside the window (start may be slightly older).
+    if inLookback(x2) or inLookback(x1) or inLookback(bar_index)
+        bx := pairBox(x1, y1, x2, meas, dir, c)
+        if showLegLabels
+            lb := label.new(math.round(math.avg(x1, x2)), math.avg(y1, y2), "L1", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
+    array.push(zzLegs, ZzLeg.new(dir, x1, x2, y1, y2, lb, bx, meas, "L1", false, false))
+    trimZzLegs()
     true
 
-pushZzLeg(ZzPt a, ZzPt b, float atrNow) =>
-    int dir = b.px > a.px ? 1 : b.px < a.px ? -1 : 0
-    int bars = math.abs(b.bar - a.bar)
-    float meas = math.abs(b.px - a.px)
-    bool isL1 = dir != 0 and meas > 0 and bars >= minLegBars and legSizeOk(a.px, b.px, atrNow)
-    bool isCorr = dir != 0 and meas > 0 and bars >= minCorrBars
-    bool ok = isL1 or isCorr
-    if ok
+// Confirmed zigzag swing from (x1,y1) to (x2,y2).
+// Unpaired opposite L1 ⇒ this swing is the correction (no correction box).
+// Otherwise a large enough swing becomes a new L1.
+onConfirmedSwing(int x1, float y1, int x2, float y2, float atrNow) =>
+    int dir = y2 > y1 ? 1 : y2 < y1 ? -1 : 0
+    int bars = math.max(1, math.abs(x2 - x1))
+    float meas = math.abs(y2 - y1)
+    if dir != 0 and meas > 0
         int mate = findUnpairedL1(dir)
         if mate >= 0
             ZzLeg l1m = array.get(zzLegs, mate)
             float l1sz = not na(l1m.meas) ? l1m.meas : math.abs(l1m.y2 - l1m.y1)
-            if meas >= l1sz and l1sz > 0
+            if l1sz > 0 and meas >= l1sz
                 removeL1(mate)
-                mate := -1
-        string txt = isL1 ? "L1" : "C"
-        color c = fade(cssOf(dir), 0)
-        label lb = na
-        box bx = na
-        if isL1 and inLookback(a.bar)
-            bx := pairBox(a.bar, a.px, b.bar, meas, dir, c)
-            if showLegLabels
-                lb := label.new(math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px), "L1", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
-        array.push(zzLegs, ZzLeg.new(dir, a.bar, b.bar, a.px, b.px, lb, bx, meas, txt, false, false))
-        trimZzLegs()
-        if mate >= 0
-            spawnL2(mate, b.bar, b.px)
+                if bars >= minLegBars and meas >= needSize(atrNow)
+                    spawnL1(dir, x1, x2, y1, y2, meas)
+            else if bars >= minCorrBars
+                spawnL2(mate, x2, y2)
+        else if bars >= minLegBars and meas >= needSize(atrNow)
+            spawnL1(dir, x1, x2, y1, y2, meas)
     true
 
-addZzPt(int b, float p, bool isHigh, float atrNow) =>
-    int sz = array.size(zzPts)
-    if sz > 0
-        ZzPt last = array.get(zzPts, sz - 1)
-        if last.isHigh == isHigh
-            bool better = isHigh ? p >= last.px : p <= last.px
-            if better
-                array.set(zzPts, sz - 1, ZzPt.new(b, p, isHigh))
-                redrawLastZzLeg()
-            false
-        else
-            array.push(zzPts, ZzPt.new(b, p, isHigh))
-            pushZzLeg(last, array.get(zzPts, array.size(zzPts) - 1), atrNow)
-            true
-    else
-        array.push(zzPts, ZzPt.new(b, p, isHigh))
-        true
+clearLive() =>
+    if not na(zzLiveLbl)
+        label.delete(zzLiveLbl)
+        zzLiveLbl := na
+    if not na(zzLiveBox)
+        box.delete(zzLiveBox)
+        zzLiveBox := na
+    true
 
-confirmMajorHigh(float atrNow) =>
-    addZzPt(zzStartBar, zzStartPx, false, atrNow)
-    addZzPt(zzExtBar, zzExtPx, true, atrNow)
+bootSwing() =>
+    zzDir := close >= open ? 1 : -1
+    zzStartBar := bar_index
+    zzStartPx := zzDir == 1 ? low : high
+    zzExtBar := bar_index
+    zzExtPx := zzDir == 1 ? high : low
+    true
 
-confirmMajorLow(float atrNow) =>
-    addZzPt(zzStartBar, zzStartPx, true, atrNow)
-    addZzPt(zzExtBar, zzExtPx, false, atrNow)
+flipFromExt(int newDir) =>
+    zzDir := newDir
+    zzStartBar := zzExtBar
+    zzStartPx := zzExtPx
+    zzExtBar := bar_index
+    zzExtPx := newDir == 1 ? high : low
+    true
 
 // ================================================================================================
-// State
+// Bar engine
 // ================================================================================================
 
 bool l1Alert = false
@@ -350,77 +340,93 @@ bool entryBuyAlert = false
 bool entrySellAlert = false
 bool tpAlert = false
 bool slAlert = false
-bool zzChanged = false
+bool justL1 = false
+bool justL2 = false
 
 atrVal = ta.atr(atrLen)
 float sizeNeed = needSize(atrVal)
 
-if showLegs and bar_index > 3
+if showLegs and bar_index > 1
+    // Trading-session window (not calendar 72h). Seed on first bar; then on each new day.
     int dayT = time("D")
-    if not na(dayT)
-        if array.size(sessOpen) == 0 or array.get(sessOpen, array.size(sessOpen) - 1) != dayT
-            array.push(sessOpen, dayT)
-            while array.size(sessOpen) > lookbackDays
-                array.shift(sessOpen)
-            pruneOldDraws()
+    bool newSess = not na(dayT) and (array.size(sessOpen) == 0 or array.get(sessOpen, array.size(sessOpen) - 1) != dayT)
+    if newSess
+        array.push(sessOpen, dayT)
+        array.push(sessBars, bar_index)
+        while array.size(sessOpen) > lookbackDays
+            array.shift(sessOpen)
+            array.shift(sessBars)
+        pruneOldDraws()
+        // Kill a swing that started before the visible window so it cannot stay
+        // unconfirmed for days (that left the chart blank).
+        if array.size(sessBars) > 0 and zzStartBar < array.get(sessBars, 0)
+            bootSwing()
+    if na(dayT) and array.size(sessBars) == 0
+        array.push(sessOpen, time)
+        array.push(sessBars, 0)
+
     if zzDir == 0
-        zzDir := close >= open ? 1 : -1
-        zzStartBar := bar_index
-        zzStartPx := zzDir == 1 ? low : high
-        zzExtBar := bar_index
-        zzExtPx := zzDir == 1 ? high : low
+        bootSwing()
     else if zzDir == 1
         if high >= zzExtPx
             zzExtPx := high
             zzExtBar := bar_index
-        else
-            float rise = zzExtPx - zzStartPx
-            float retr = zzExtPx - low
-            int spanBars = zzExtBar - zzStartBar
-            bool easyC = awaitingCorrEnd()
-            bool major = rise >= sizeNeed and spanBars >= minLegBars and reversalEnough(rise, retr, atrVal)
-            bool corrEnd = easyC and corrFinished(rise, retr, spanBars, atrVal)
-            bool abandonTiny = not easyC and rise < sizeNeed and retr >= sizeNeed
-            if major or corrEnd
-                confirmMajorHigh(atrVal)
-                zzChanged := true
-                zzDir := -1
-                zzStartBar := zzExtBar
-                zzStartPx := zzExtPx
-                zzExtBar := bar_index
-                zzExtPx := low
-            else if abandonTiny
-                zzDir := -1
-                zzStartBar := zzExtBar
-                zzStartPx := zzExtPx
-                zzExtBar := bar_index
-                zzExtPx := low
+        float rise = zzExtPx - zzStartPx
+        // Same-bar wick is not a reversal. Confirm only after the extreme bar, from close.
+        float retr = bar_index > zzExtBar ? zzExtPx - close : 0.0
+        int spanBars = math.max(1, zzExtBar - zzStartBar)
+        bool easyC = awaitingCorrEnd()
+        int l1Wait = findUnpairedL1(zzDir)
+        float l1Need = 0.0
+        if l1Wait >= 0
+            ZzLeg l1ref = array.get(zzLegs, l1Wait)
+            l1Need := not na(l1ref.meas) ? l1ref.meas : math.abs(l1ref.y2 - l1ref.y1)
+        bool major = rise >= sizeNeed and spanBars >= minLegBars and reversalEnough(rise, retr, atrVal)
+        bool corrEnd = easyC and bar_index > zzExtBar and corrFinished(math.max(rise, l1Need * 0.35), retr, spanBars, atrVal)
+        bool abandonTiny = not easyC and rise < sizeNeed and retr >= sizeNeed
+        if (major or corrEnd) and retr > 0
+            int n0 = array.size(zzLegs)
+            onConfirmedSwing(zzStartBar, zzStartPx, zzExtBar, zzExtPx, atrVal)
+            int n1 = array.size(zzLegs)
+            if n1 > n0
+                ZzLeg added = array.get(zzLegs, n1 - 1)
+                if added.kind == "L1"
+                    justL1 := true
+                if added.kind == "L2"
+                    justL2 := true
+            flipFromExt(-1)
+        else if abandonTiny
+            flipFromExt(-1)
     else
         if low <= zzExtPx
             zzExtPx := low
             zzExtBar := bar_index
-        else
-            float drop = zzStartPx - zzExtPx
-            float retr = high - zzExtPx
-            int spanBars = zzExtBar - zzStartBar
-            bool easyC = awaitingCorrEnd()
-            bool major = drop >= sizeNeed and spanBars >= minLegBars and reversalEnough(drop, retr, atrVal)
-            bool corrEnd = easyC and corrFinished(drop, retr, spanBars, atrVal)
-            bool abandonTiny = not easyC and drop < sizeNeed and retr >= sizeNeed
-            if major or corrEnd
-                confirmMajorLow(atrVal)
-                zzChanged := true
-                zzDir := 1
-                zzStartBar := zzExtBar
-                zzStartPx := zzExtPx
-                zzExtBar := bar_index
-                zzExtPx := high
-            else if abandonTiny
-                zzDir := 1
-                zzStartBar := zzExtBar
-                zzStartPx := zzExtPx
-                zzExtBar := bar_index
-                zzExtPx := high
+        float drop = zzStartPx - zzExtPx
+        float retr = bar_index > zzExtBar ? close - zzExtPx : 0.0
+        int spanBars = math.max(1, zzExtBar - zzStartBar)
+        bool easyC = awaitingCorrEnd()
+        int l1Wait = findUnpairedL1(zzDir)
+        float l1Need = 0.0
+        if l1Wait >= 0
+            ZzLeg l1ref = array.get(zzLegs, l1Wait)
+            l1Need := not na(l1ref.meas) ? l1ref.meas : math.abs(l1ref.y2 - l1ref.y1)
+        bool major = drop >= sizeNeed and spanBars >= minLegBars and reversalEnough(drop, retr, atrVal)
+        bool corrEnd = easyC and bar_index > zzExtBar and corrFinished(math.max(drop, l1Need * 0.35), retr, spanBars, atrVal)
+        bool abandonTiny = not easyC and drop < sizeNeed and retr >= sizeNeed
+        if (major or corrEnd) and retr > 0
+            int n0 = array.size(zzLegs)
+            onConfirmedSwing(zzStartBar, zzStartPx, zzExtBar, zzExtPx, atrVal)
+            int n1 = array.size(zzLegs)
+            if n1 > n0
+                ZzLeg added = array.get(zzLegs, n1 - 1)
+                if added.kind == "L1"
+                    justL1 := true
+                if added.kind == "L2"
+                    justL2 := true
+            flipFromExt(1)
+        else if abandonTiny
+            flipFromExt(1)
+
     int l1iKill = findUnpairedL1(zzDir)
     if l1iKill >= 0
         ZzLeg l1w = array.get(zzLegs, l1iKill)
@@ -428,15 +434,19 @@ if showLegs and bar_index > 3
         float l1sz = not na(l1w.meas) ? l1w.meas : math.abs(l1w.y2 - l1w.y1)
         if l1sz > 0 and corrNow >= l1sz
             removeL1(l1iKill)
-    if array.size(zzLegs) > 0
-        ZzLeg lastLg = array.get(zzLegs, array.size(zzLegs) - 1)
-        if zzChanged and lastLg.kind == "L1" and not lastLg.hasPair
-            l1Alert := true
-        if zzChanged and lastLg.kind == "L2"
+
+    if justL1
+        l1Alert := true
+    if justL2
+        int nL = array.size(zzLegs)
+        if nL > 0
+            ZzLeg lastLg = array.get(zzLegs, nL - 1)
             if lastLg.dir == 1
                 entryBuyAlert := true
             else
                 entrySellAlert := true
+
+    if array.size(zzLegs) > 0
         for i = 0 to array.size(zzLegs) - 1
             ZzLeg lg = array.get(zzLegs, i)
             if lg.kind == "L2" and not lg.frozen and not na(lg.bx)
@@ -449,6 +459,7 @@ if showLegs and bar_index > 3
                 if not na(lg.lb)
                     label.set_x(lg.lb, math.round(math.avg(lg.x1, x2)))
                 array.set(zzLegs, i, lg)
+
     if showSp2lLevels and array.size(spPairs) > 0
         for p = 0 to array.size(spPairs) - 1
             Sp2lDraw pr = array.get(spPairs, p)
@@ -479,24 +490,29 @@ if showLegs and bar_index > 3
                 if not na(pr.lbT2)
                     label.set_x(pr.lbT2, x2p)
                 array.set(spPairs, p, pr)
+
     bool openL2 = false
     if array.size(zzLegs) > 0
         for j = 0 to array.size(zzLegs) - 1
             ZzLeg lg2 = array.get(zzLegs, j)
             if lg2.kind == "L2" and not lg2.frozen and lg2.dir == zzDir
                 openL2 := true
-    bool formingL1 = not awaitingCorrEnd() and not openL2 and inLookback(zzStartBar) and math.abs(zzExtPx - zzStartPx) >= sizeNeed * 0.35
+
+    // Live L1: current impulse, only while we are not already inside a correction/L2.
+    // Gate on the CURRENT bar so an old zzStartBar cannot hide the box.
+    bool formingL1 = not awaitingCorrEnd() and not openL2 and inLookback(bar_index) and math.abs(zzExtPx - zzStartPx) >= sizeNeed * 0.25
     color lc = fade(cssOf(zzDir == 0 ? 1 : zzDir), 0)
     if formingL1
         float liveTop = math.max(zzStartPx, zzExtPx)
         float liveBot = math.min(zzStartPx, zzExtPx)
+        int liveR = math.max(zzExtBar, bar_index)
         if na(zzLiveBox)
-            zzLiveBox := box.new(zzStartBar, liveTop, math.max(zzExtBar, bar_index), liveBot, border_color = fade(lc, 25), bgcolor = fade(lc, boxTransp), border_width = 2)
+            zzLiveBox := box.new(zzStartBar, liveTop, liveR, liveBot, border_color = fade(lc, 25), bgcolor = fade(lc, boxTransp), border_width = 2)
         else
             box.set_lefttop(zzLiveBox, zzStartBar, liveTop)
-            box.set_rightbottom(zzLiveBox, math.max(zzExtBar, bar_index), liveBot)
+            box.set_rightbottom(zzLiveBox, liveR, liveBot)
         if showLegLabels
-            int midX = math.round(math.avg(zzStartBar, math.max(zzExtBar, bar_index)))
+            int midX = math.round(math.avg(zzStartBar, liveR))
             float midY = math.avg(zzStartPx, zzExtPx)
             if na(zzLiveLbl)
                 zzLiveLbl := label.new(midX, midY, "L1", xloc.bar_index, yloc.price, lc, label.style_label_left, color.white, size.small)
@@ -505,12 +521,7 @@ if showLegs and bar_index > 3
                 label.set_text(zzLiveLbl, "L1")
                 label.set_color(zzLiveLbl, lc)
     else
-        if not na(zzLiveLbl)
-            label.delete(zzLiveLbl)
-            zzLiveLbl := na
-        if not na(zzLiveBox)
-            box.delete(zzLiveBox)
-            zzLiveBox := na
+        clearLive()
 
 alertcondition(l1Alert, "SP2L L1", "SP2L first leg")
 alertcondition(entryBuyAlert, "SP2L Buy", "SP2L buy — entry at correction end")
