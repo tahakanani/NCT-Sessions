@@ -25,7 +25,7 @@ showL2Proj = input.bool(true, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
 grpPos = "Position Management"
-entryMode = input.string("50%", "Entry Retracement of L1", options = ["50%", "70%", "86%"], group = grpPos, tooltip = "ورود روی برگشت به این درصد از اندازه L1")
+entryMode = input.string("50%", "Entry Retracement of L1", options = ["50%", "70%", "86%"], group = grpPos, tooltip = "ورود از ابتدای L1؛ مثلا 70 یعنی 70 درصد مسیر از کف/سقف شروع لگ")
 rrRatio = input.float(2.0, "Risk-Reward Ratio", minval = 0.5, step = 0.1, group = grpPos, tooltip = "TP2 نسبت به ریسک؛ TP1 همیشه 1R است")
 maxWaitBars = input.int(80, "Max Wait Bars After Spike", minval = 5, maxval = 500, group = grpPos)
 showTpRr = input.bool(false, "Show R:R Take-Profits", group = grpPos)
@@ -367,7 +367,7 @@ entryRetrPct() =>
 
 retrEntryPx(Setup s) =>
     float pct = entryRetrPct()
-    s.dir == 1 ? s.extreme - s.spikeSize * pct : s.extreme + s.spikeSize * pct
+    s.dir == 1 ? s.origin + s.spikeSize * pct : s.origin - s.spikeSize * pct
 
 inEntryHours() =>
     bool ok = true
