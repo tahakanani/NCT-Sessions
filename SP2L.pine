@@ -71,6 +71,10 @@ type Setup
     float origin = na
     float extreme = na
     float spikeSize = na
+    float corrPx = na
+    int corrBar = 0
+    bool corrHadBounce = false
+    bool corrPending = false
     float entry = na
     int entryBar = 0
     float sl = na
@@ -290,6 +294,10 @@ resetSetup(Setup s) =>
     s.origin := na
     s.extreme := na
     s.spikeSize := na
+    s.corrPx := na
+    s.corrBar := 0
+    s.corrHadBounce := false
+    s.corrPending := false
     s.entry := na
     s.entryBar := 0
     s.sl := na
@@ -372,7 +380,32 @@ fillZzSpike(Setup s, int dir, int startBar, int endBar, float origin, float extr
     s.origin := origin
     s.extreme := extreme
     s.spikeSize := math.abs(extreme - origin)
-    rebuildLevels(s, zzNewest(endBar), zzOldest(startBar, endBar))
+    s.corrPx := na
+    s.corrBar := 0
+    s.corrHadBounce := false
+    s.corrPending := false
+    if not na(s.lvlPx)
+        array.clear(s.lvlPx)
+        array.clear(s.lvlBar)
+        array.clear(s.lvlUsed)
+    true
+
+updateCorrExtreme(Setup s) =>
+    if s.phase == 2 and bar_index > s.endBar
+        if s.dir == 1
+            if na(s.corrPx) or low < s.corrPx
+                s.corrPx := low
+                s.corrBar := bar_index
+                if s.corrPending
+                    s.corrPending := false
+                    s.corrHadBounce := true
+        else
+            if na(s.corrPx) or high > s.corrPx
+                s.corrPx := high
+                s.corrBar := bar_index
+                if s.corrPending
+                    s.corrPending := false
+                    s.corrHadBounce := true
     true
 
 zzSpikeValid(int dir, int startBar, int endBar, float origin, float extreme, float atrNow) =>
@@ -717,15 +750,27 @@ if not newComplete and (cur.phase == 0 or cur.phase == 1) and zzDir != 0
     else if cur.phase == 1
         resetSetup(cur)
 
-if cur.phase == 2 and not na(cur.lvlPx) and array.size(cur.lvlPx) > 0 and not array.get(cur.lvlUsed, 0)
-    float px = array.get(cur.lvlPx, 0)
-    int lb = array.get(cur.lvlBar, 0)
-    bool afterL1 = bar_index > cur.endBar and bar_index > lb + 1
-    bool touch = afterL1 and low <= px and high >= px
+updateCorrExtreme(cur)
+
+if cur.phase == 2 and not na(cur.corrPx) and bar_index > cur.endBar
     bool stillValid = cur.dir == 1 ? low >= cur.origin : high <= cur.origin
-    if touch and stillValid
-        array.set(cur.lvlUsed, 0, true)
-        enterTrade(cur, px)
+    bool finishedOpp = zzJustConfirmed and zzConfDir != cur.dir
+    bool enterNow = false
+    if finishedOpp
+        if cur.corrHadBounce
+            enterNow := true
+        else
+            cur.corrPending := true
+    else if zzJustConfirmed and zzConfDir == cur.dir and cur.corrPending
+        float resumeSize = math.abs(zzConfExt - zzConfOrig)
+        bool largeResume = resumeSize >= atrVal * minLegAtr and resumeSize >= cur.spikeSize * 0.35
+        if largeResume
+            enterNow := true
+        else
+            cur.corrPending := false
+            cur.corrHadBounce := true
+    if enterNow and stillValid
+        enterTrade(cur, cur.corrPx)
         if cur.dir == 1
             entryBuyAlert := true
         else
