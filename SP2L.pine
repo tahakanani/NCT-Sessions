@@ -25,10 +25,7 @@ showL2Proj = input.bool(false, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
 grpPos = "Position Management"
-useSlThresh = input.bool(true, "Stop-Loss Threshold", group = grpPos)
-slThresh = input.float(0.0, "Stop-Loss Threshold Value", minval = 0.0, step = 0.001, group = grpPos, tooltip = "فاصلهٔ اضافه به SL بر حسب قیمت")
 rrRatio = input.float(2.0, "Risk-Reward Ratio", minval = 0.5, step = 0.1, group = grpPos, tooltip = "TP2 نسبت به ریسک؛ TP1 همیشه 1R است")
-includeThreshInRR = input.bool(true, "Include SL Threshold in R:R", group = grpPos)
 maxWaitBars = input.int(80, "Max Wait Bars After Spike", minval = 5, maxval = 500, group = grpPos)
 showTpRr = input.bool(true, "Show R:R Take-Profits", group = grpPos)
 startCap = input.float(1000.0, "Starting Capital $", minval = 1.0, step = 100.0, group = grpPos)
