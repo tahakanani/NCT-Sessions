@@ -20,7 +20,7 @@ zzDepth = input.int(12, "Depth", minval = 1, step = 1, group = grpLeg)
 zzDeviation = input.int(5, "Deviation", minval = 1, step = 1, group = grpLeg, tooltip = "حداقل حرکت بین سقف و کف بر حسب پوینت")
 zzBackstep = input.int(2, "Backstep", minval = 2, step = 1, group = grpLeg)
 minLegAtr = input.float(0.5, "Min Leg Size × ATR", minval = 0.0, step = 0.1, group = grpLeg)
-maxLegsKeep = input.int(400, "Max Legs On Chart", minval = 4, maxval = 500, group = grpLeg, tooltip = "سقف خطوط زیگ‌زاگ؛ حداکثر تریدینگ‌ویو 500 خط است")
+maxLegsKeep = input.int(220, "Max Legs On Chart", minval = 4, maxval = 400, group = grpLeg, tooltip = "خطوط زیگ‌زاگ؛ کمی پایین‌تر از 500 تا جا برای باکس و پوزیشن بماند")
 showL2Proj = input.bool(false, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
@@ -34,7 +34,7 @@ goldOzPerLot = input.float(100.0, "Gold oz per 1.00 Lot", minval = 1.0, step = 1
 
 grpDisp = "Display Settings"
 displayMode = input.string("Setup", "Display Mode", options = ["Setup", "Signal"], group = grpDisp)
-onlyLast = input.bool(true, "Only Display the Last Position", group = grpDisp, tooltip = "خاموش شود تا چند جفت L1/L2 با رنگ‌های جدا روی چارت بمانند")
+onlyLast = input.bool(false, "Only Display the Last Position", group = grpDisp, tooltip = "اگر روشن باشد فقط آخرین ستاپ می‌ماند")
 bullCss = input.color(color.new(#089981, 0), "Bullish", group = grpDisp)
 bearCss = input.color(color.new(#f23645, 0), "Bearish", group = grpDisp)
 boxTransp = input.int(85, "Spike Box Transparency", minval = 50, maxval = 95, group = grpDisp)
@@ -375,7 +375,7 @@ redrawSetup(Setup s) =>
             if showSetup or s.phase >= 2
                 float top = math.max(s.origin, s.extreme)
                 float bot = math.min(s.origin, s.extreme)
-                int x2 = math.max(s.endBar, bar_index)
+                int x2 = s.phase >= 4 ? math.max(s.endBar, s.entryBar) : math.max(s.endBar, bar_index)
                 s.bSpike := box.new(s.startBar, top, x2, bot, border_color = fade(c, 60), bgcolor = fade(c, boxTransp), border_width = 1)
                 int midX = math.round(math.avg(s.startBar, s.endBar))
                 float midY = math.avg(s.origin, s.extreme)
@@ -383,11 +383,12 @@ redrawSetup(Setup s) =>
             if inTrade
                 int x1e = s.entryBar
                 int x2e = bar_index
-                s.lnEntry := line.new(x1e, s.entry, x2e, s.entry, xloc.bar_index, extend.right, fade(c, 0), line.style_solid, 2)
-                s.lnL2 := line.new(x1e, s.tpL2, x2e, s.tpL2, xloc.bar_index, extend.right, fade(c, 0), line.style_solid, 2)
+                string ext = s.phase >= 4 ? extend.none : extend.right
+                s.lnEntry := line.new(x1e, s.entry, x2e, s.entry, xloc.bar_index, ext, fade(c, 0), line.style_solid, 2)
+                s.lnL2 := line.new(x1e, s.tpL2, x2e, s.tpL2, xloc.bar_index, ext, fade(c, 0), line.style_solid, 2)
                 if showTpRr
-                    s.lnTp1 := line.new(x1e, s.tp1, x2e, s.tp1, xloc.bar_index, extend.right, color.new(color.orange, 20), line.style_dashed, 1)
-                    s.lnTp2 := line.new(x1e, s.tp2, x2e, s.tp2, xloc.bar_index, extend.right, color.new(color.orange, 0), line.style_dashed, 1)
+                    s.lnTp1 := line.new(x1e, s.tp1, x2e, s.tp1, xloc.bar_index, ext, color.new(color.orange, 20), line.style_dashed, 1)
+                    s.lnTp2 := line.new(x1e, s.tp2, x2e, s.tp2, xloc.bar_index, ext, color.new(color.orange, 0), line.style_dashed, 1)
                 drawLabel(s, x1e, s.entry, "Entry", fade(c, 0), label.style_label_left)
                 drawLabel(s, x1e, s.tpL2, "L2", fade(c, 0), label.style_label_left)
         true
@@ -451,7 +452,7 @@ enterTrade(Setup s, float px) =>
     true
 
 capHist() =>
-    if array.size(hist) > 20
+    if array.size(hist) > 80
         clearDraw(array.get(hist, 0))
         array.shift(hist)
     true
@@ -642,6 +643,7 @@ if cur.phase == 3
         float signedMove = cur.dir == 1 ? exitPx - cur.entry : cur.entry - exitPx
         statPnl += signedMove * lotSize * goldOzPerLot
         cur.phase := 4
+        redrawSetup(cur)
         archiveDraw(cur)
         if onlyLast
             clearHist()
