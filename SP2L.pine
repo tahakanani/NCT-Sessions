@@ -16,13 +16,25 @@ allowInternalPb = input.bool(true, "Allow Internal Pullback", group = grpSpike, 
 maxOppBars = input.int(5, "Max Opposite Bars", minval = 1, maxval = 15, group = grpSpike, tooltip = "حداکثر کندل مخالف پشت‌سرهم که هنوز لگ را قطع نکند")
 minDirRatio = input.float(0.40, "Min Directional Bar Ratio", minval = 0.3, maxval = 1.0, step = 0.05, group = grpSpike)
 
-grpLeg = "Leg Detection (ZigZag)"
-showLegs = input.bool(true, "Show Legs", group = grpLeg, tooltip = "یک لگ تا وقتی قیمت درصد مشخصی برنگردد ادامه دارد؛ پولبک کم‌عمق آن را قطع نمی‌کند")
-reversalPct = input.float(25.0, "Reversal %", minval = 8.0, maxval = 70.0, step = 1.0, group = grpLeg, tooltip = "درصد برگشت از سقف/کف لگ برای بستن لگ. برای طلا 100R حدود 20 تا 30")
-minLegAtr = input.float(0.5, "Min Leg Size × ATR", minval = 0.0, step = 0.1, group = grpLeg)
-maxLegsKeep = input.int(25, "Max Legs On Chart", minval = 4, maxval = 80, group = grpLeg)
-showL2Proj = input.bool(true, "Project L2 = L1", group = grpLeg)
-showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
+grpLeg = "Leg Detection | Major Swings"
+showLegs = input.bool(true, "Show Major Legs", group = grpLeg, tooltip = "همان لگ‌های بلند باکس‌شده: حرکت بزرگ، اصلاح واقعی، حرکت بزرگ بعدی")
+reversalPct = input.float(22.0, "Reversal % of Leg", minval = 10.0, maxval = 80.0, step = 1.0, group = grpLeg, tooltip = "پولبک کم‌عمق لگ را قطع نمی‌کند")
+minLegAtr = input.float(0.8, "Min Leg Size × ATR", minval = 0.2, step = 0.1, group = grpLeg)
+minLegPrice = input.float(4.0, "Min Leg Size (Price)", minval = 0.0, step = 0.5, group = grpLeg, tooltip = "طلا ۱دقیقه: ۴ تا ۸. اگر چیزی ندیدی این را کم کن")
+minReversalAtr = input.float(0.35, "Min Reversal × ATR", minval = 0.1, step = 0.05, group = grpLeg)
+minLegBars = input.int(3, "Min Leg Bars", minval = 2, maxval = 120, group = grpLeg)
+levelPivot = input.int(5, "HL / LH Pivot Bars", minval = 3, maxval = 20, group = grpLeg, tooltip = "فقط سوئینگ واقعی داخل لگ دوم، نه هر کف کندلی")
+minLevelAtr = input.float(0.8, "Min HL Depth × ATR", minval = 0.2, step = 0.1, group = grpLeg)
+maxStructLevels = input.int(3, "Max HL / LH Lines", minval = 1, maxval = 6, group = grpLeg)
+maxLegsKeep = input.int(20, "Max Legs On Chart", minval = 4, maxval = 60, group = grpLeg)
+corrEndPct = input.float(18.0, "Correction End %", minval = 5.0, maxval = 50.0, step = 1.0, group = grpLeg, tooltip = "بعد از L1، با این درصد برگشت از کف/سقف اصلاح، اصلاح تمام و L2 رسم می‌شود")
+corrEndAtr = input.float(0.35, "Correction End × ATR", minval = 0.1, step = 0.05, group = grpLeg)
+minCorrBars = input.int(2, "Min Correction Bars", minval = 1, maxval = 20, group = grpLeg)
+showL2Proj = input.bool(false, "Show L2 Target Line", group = grpLeg)
+useCandleSpike = input.bool(false, "Use Candle-Run Spike Engine", group = grpLeg, tooltip = "خاموش بماند")
+showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg)
+showLegLabels = input.bool(true, "Show L1 / L2 Labels", group = grpLeg)
+showSp2lLevels = input.bool(true, "Show SL / Entry / TP1 / TP2", group = grpLeg, tooltip = "متد رسم پورصمدی: SL شروع لگ ۱، Entry پایان اصلاح، TP1 و TP2 هر کدام برابر اندازه لگ ۱")
 
 grpGap = "Spike Filter | Gap"
 useGapFilter = input.bool(false, "Gap Filter", group = grpGap)
@@ -46,7 +58,7 @@ useSlThresh = input.bool(true, "Stop-Loss Threshold", group = grpPos)
 slThresh = input.float(0.0, "Stop-Loss Threshold Value", minval = 0.0, step = 0.001, group = grpPos, tooltip = "فاصلهٔ اضافه به SL بر حسب قیمت")
 rrRatio = input.float(2.0, "Risk-Reward Ratio", minval = 0.5, step = 0.1, group = grpPos, tooltip = "TP2 نسبت به ریسک؛ TP1 همیشه 1R است")
 includeThreshInRR = input.bool(true, "Include SL Threshold in R:R", group = grpPos)
-maxWaitBars = input.int(80, "Max Wait Bars After Spike", minval = 5, maxval = 500, group = grpPos)
+maxWaitBars = input.int(200, "Max Wait Bars After Spike", minval = 5, maxval = 800, group = grpPos)
 showTpRr = input.bool(true, "Show R:R Take-Profits", group = grpPos)
 
 grpDisp = "Display Settings"
@@ -54,7 +66,7 @@ displayMode = input.string("Setup", "Display Mode", options = ["Setup", "Signal"
 onlyLast = input.bool(true, "Only Display the Last Position", group = grpDisp)
 bullCss = input.color(color.new(#089981, 0), "Bullish", group = grpDisp)
 bearCss = input.color(color.new(#f23645, 0), "Bearish", group = grpDisp)
-boxTransp = input.int(85, "Spike Box Transparency", minval = 50, maxval = 95, group = grpDisp)
+boxTransp = input.int(82, "L1 / L2 Box Transparency", minval = 50, maxval = 95, group = grpDisp)
 lvlTransp = input.int(20, "Level Line Transparency", minval = 0, maxval = 80, group = grpDisp)
 
 // ================================================================================================
@@ -100,6 +112,29 @@ type ZzLeg
     float y2 = na
     line ln = na
     label lb = na
+    box bx = na
+    float meas = na
+    string kind = ""
+    bool hasPair = false
+    bool frozen = false
+
+type Sp2lDraw
+    int dir = 0
+    int x0 = 0
+    int xE = 0
+    float sl = na
+    float entry = na
+    float tp1 = na
+    float tp2 = na
+    line lnSl = na
+    line lnEntry = na
+    line lnTp1 = na
+    line lnTp2 = na
+    label lbSl = na
+    label lbEn = na
+    label lbT1 = na
+    label lbT2 = na
+    bool frozen = false
 
 var Setup cur = Setup.new()
 var array<Setup> hist = array.new<Setup>()
@@ -107,8 +142,10 @@ var array<ZzPt> zzPts = array.new<ZzPt>()
 var array<ZzLeg> zzLegs = array.new<ZzLeg>()
 var line zzLive = na
 var label zzLiveLbl = na
+var box zzLiveBox = na
 var line zzL2proj = na
 var label zzL2lbl = na
+var array<Sp2lDraw> spPairs = array.new<Sp2lDraw>()
 var int zzDir = 0
 var int zzStartBar = 0
 var float zzStartPx = na
@@ -304,29 +341,56 @@ resetSetup(Setup s) =>
 nearPx(float a, float b) =>
     math.abs(a - b) <= math.max(syminfo.mintick * 4, (high - low) * 0.02)
 
-rebuildLevels(Setup s, int newest, int oldest) =>
+nearLevel(float a, float b, float atrNow) =>
+    math.abs(a - b) <= math.max(atrNow * minLevelAtr * 0.5, (high - low) * 0.05)
+
+rebuildLevels(Setup s, int newest, int oldest, float atrNow) =>
     initArrays(s)
     array.clear(s.lvlPx)
     array.clear(s.lvlBar)
     array.clear(s.lvlUsed)
-    if oldest - 1 >= newest
-        for i = newest to oldest - 1
-            int newer = i
-            int older = i + 1
-            bool hl = s.dir == 1 and low[newer] > low[older]
-            bool lh = s.dir == -1 and high[newer] < high[older]
-            if hl or lh
-                float px = s.dir == 1 ? low[older] : high[older]
-                int b = bar_index - older
-                bool dup = false
-                if array.size(s.lvlPx) > 0
-                    for k = 0 to array.size(s.lvlPx) - 1
-                        if nearPx(array.get(s.lvlPx, k), px)
-                            dup := true
-                if not dup
-                    array.push(s.lvlPx, px)
-                    array.push(s.lvlBar, b)
-                    array.push(s.lvlUsed, false)
+    int left = levelPivot
+    if oldest - left * 2 > newest
+        for i = newest + left to oldest - left
+            bool isPL = true
+            bool isPH = true
+            for j = 1 to left
+                if low[i] > low[i - j] or low[i] > low[i + j]
+                    isPL := false
+                if high[i] < high[i - j] or high[i] < high[i + j]
+                    isPH := false
+            if s.dir == 1 and isPL
+                float depth = windowHigh(i, oldest) - low[i]
+                if depth >= atrNow * minLevelAtr
+                    float px = low[i]
+                    int b = bar_index - i
+                    bool dup = false
+                    if array.size(s.lvlPx) > 0
+                        for k = 0 to array.size(s.lvlPx) - 1
+                            if nearLevel(array.get(s.lvlPx, k), px, atrNow)
+                                dup := true
+                    if not dup
+                        array.push(s.lvlPx, px)
+                        array.push(s.lvlBar, b)
+                        array.push(s.lvlUsed, false)
+            else if s.dir == -1 and isPH
+                float depth = high[i] - windowLow(i, oldest)
+                if depth >= atrNow * minLevelAtr
+                    float px = high[i]
+                    int b = bar_index - i
+                    bool dup = false
+                    if array.size(s.lvlPx) > 0
+                        for k = 0 to array.size(s.lvlPx) - 1
+                            if nearLevel(array.get(s.lvlPx, k), px, atrNow)
+                                dup := true
+                    if not dup
+                        array.push(s.lvlPx, px)
+                        array.push(s.lvlBar, b)
+                        array.push(s.lvlUsed, false)
+        while array.size(s.lvlPx) > maxStructLevels
+            array.shift(s.lvlPx)
+            array.shift(s.lvlBar)
+            array.shift(s.lvlUsed)
     true
 
 fillSpike(Setup s, int dir, int newest, int oldest) =>
@@ -337,14 +401,119 @@ fillSpike(Setup s, int dir, int newest, int oldest) =>
     s.origin := dir == 1 ? windowLow(newest, oldest) : windowHigh(newest, oldest)
     s.extreme := dir == 1 ? windowHigh(newest, oldest) : windowLow(newest, oldest)
     s.spikeSize := math.abs(s.extreme - s.origin)
-    rebuildLevels(s, newest, oldest)
+    rebuildLevels(s, newest, oldest, ta.atr(atrLen))
     true
+
+fillFromMajorLegs(Setup s, ZzLeg l1, ZzLeg corr, float atrNow) =>
+    initArrays(s)
+    s.dir := l1.dir
+    s.startBar := l1.x1
+    s.endBar := corr.x2
+    s.origin := l1.y1
+    s.extreme := l1.y2
+    s.spikeSize := math.abs(l1.y2 - l1.y1)
+    int oldest = math.max(0, bar_index - zzStartBar)
+    rebuildLevels(s, 0, oldest, atrNow)
+    true
+
+addLiveLevel(Setup s, float atrNow) =>
+    initArrays(s)
+    bool added = false
+    float pv = s.dir == 1 ? ta.pivotlow(low, levelPivot, levelPivot) : ta.pivothigh(high, levelPivot, levelPivot)
+    int pb = bar_index - levelPivot
+    if not na(pv) and pb > zzStartBar
+        int oldest = math.max(levelPivot, bar_index - zzStartBar)
+        float depth = s.dir == 1 ? windowHigh(levelPivot, oldest) - pv : pv - windowLow(levelPivot, oldest)
+        if depth >= atrNow * minLevelAtr
+            bool dup = false
+            if array.size(s.lvlPx) > 0
+                for k = 0 to array.size(s.lvlPx) - 1
+                    if nearLevel(array.get(s.lvlPx, k), pv, atrNow)
+                        dup := true
+            if not dup
+                array.push(s.lvlPx, pv)
+                array.push(s.lvlBar, pb)
+                array.push(s.lvlUsed, false)
+                added := true
+                while array.size(s.lvlPx) > maxStructLevels
+                    array.shift(s.lvlPx)
+                    array.shift(s.lvlBar)
+                    array.shift(s.lvlUsed)
+    added
 
 cssOf(int dir) =>
     dir == 1 ? bullCss : bearCss
 
 fade(color c, int transp) =>
     color.new(c, transp)
+
+pairBox(int x1, float yStart, int x2, float size, int dir, color c) =>
+    float yEnd = dir == 1 ? yStart + size : yStart - size
+    box.new(x1, math.max(yStart, yEnd), math.max(x2, x1 + 1), math.min(yStart, yEnd), border_color = fade(c, 15), bgcolor = fade(c, boxTransp), border_width = 2)
+
+setPairBox(box bx, int x1, float yStart, int x2, float size, int dir) =>
+    float yEnd = dir == 1 ? yStart + size : yStart - size
+    if not na(bx)
+        box.set_lefttop(bx, x1, math.max(yStart, yEnd))
+        box.set_rightbottom(bx, math.max(x2, x1 + 1), math.min(yStart, yEnd))
+    true
+
+clearPairDraw(Sp2lDraw p) =>
+    if not na(p.lnSl)
+        line.delete(p.lnSl)
+    if not na(p.lnEntry)
+        line.delete(p.lnEntry)
+    if not na(p.lnTp1)
+        line.delete(p.lnTp1)
+    if not na(p.lnTp2)
+        line.delete(p.lnTp2)
+    if not na(p.lbSl)
+        label.delete(p.lbSl)
+    if not na(p.lbEn)
+        label.delete(p.lbEn)
+    if not na(p.lbT1)
+        label.delete(p.lbT1)
+    if not na(p.lbT2)
+        label.delete(p.lbT2)
+    true
+
+trimPairs() =>
+    if array.size(spPairs) > math.max(4, maxLegsKeep / 2)
+        clearPairDraw(array.get(spPairs, 0))
+        array.shift(spPairs)
+    true
+
+lvlLine(int x1, float y, int x2, color c, string st) =>
+    line.new(x1, y, x2, y, xloc.bar_index, extend.none, c, st == "dot" ? line.style_dotted : line.style_solid, st == "dot" ? 2 : 2)
+
+lvlLbl(int x, float y, string txt, color c) =>
+    label.new(x, y, txt, xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
+
+spawnLevels(int dir, int x0, int xE, float sl, float entry, float meas) =>
+    float tp1 = dir == 1 ? entry + meas : entry - meas
+    float tp2 = dir == 1 ? entry + meas * 2.0 : entry - meas * 2.0
+    int x2 = math.max(xE + 1, bar_index)
+    color c = fade(cssOf(dir), 0)
+    line lnSl = na
+    line lnEn = na
+    line ln1 = na
+    line ln2 = na
+    label lbSl = na
+    label lbEn = na
+    label lb1 = na
+    label lb2 = na
+    if showSp2lLevels
+        lnSl := lvlLine(x0, sl, x2, color.new(color.red, 0), "dot")
+        lnEn := lvlLine(xE, entry, x2, c, "solid")
+        ln1 := lvlLine(xE, tp1, x2, fade(c, 0), "solid")
+        ln2 := lvlLine(xE, tp2, x2, color.new(color.orange, 0), "solid")
+        lbSl := lvlLbl(x2, sl, "SL", color.new(color.red, 0))
+        lbEn := lvlLbl(x2, entry, "Entry", c)
+        lb1 := lvlLbl(x2, tp1, "TP1", c)
+        lb2 := lvlLbl(x2, tp2, "TP2", color.new(color.orange, 0))
+    array.push(spPairs, Sp2lDraw.new(dir, x0, xE, sl, entry, tp1, tp2, lnSl, lnEn, ln1, ln2, lbSl, lbEn, lb1, lb2, false))
+    trimPairs()
+    true
 
 drawLabel(Setup s, int x, float y, string txt, color c, string style) =>
     label lb = label.new(x, y, txt, xloc.bar_index, yloc.price, c, style, color.white, size.small)
@@ -363,7 +532,7 @@ redrawSetup(Setup s) =>
         bool show = showSetup or (showSignal and inTrade)
         color c = cssOf(s.dir)
         if show and (showSetup or inTrade)
-            if showSetup or s.phase >= 2
+            if useCandleSpike and (showSetup or s.phase >= 2)
                 float top = math.max(s.origin, s.extreme)
                 float bot = math.min(s.origin, s.extreme)
                 int x2 = math.max(s.endBar, bar_index)
@@ -372,12 +541,12 @@ redrawSetup(Setup s) =>
                     drawLabel(s, s.startBar, s.dir == 1 ? s.origin : s.extreme, "Spike", fade(c, 0), s.dir == 1 ? label.style_label_up : label.style_label_down)
             if showSetup and s.phase < 3 and not na(s.lvlPx) and array.size(s.lvlPx) > 0
                 int nLvl = array.size(s.lvlPx)
-                int lastLbl = math.min(nLvl, 8) - 1
+                int lastLbl = math.min(nLvl, maxStructLevels) - 1
                 for i = 0 to nLvl - 1
                     if not array.get(s.lvlUsed, i)
                         float px = array.get(s.lvlPx, i)
                         int x1 = array.get(s.lvlBar, i)
-                        line ln = line.new(x1, px, bar_index, px, xloc.bar_index, extend.none, fade(c, lvlTransp), line.style_dashed, 1)
+                        line ln = line.new(x1, px, bar_index, px, xloc.bar_index, extend.none, fade(c, lvlTransp), line.style_dashed, 2)
                         array.push(s.lvlLines, ln)
                         if i <= lastLbl
                             drawLabel(s, x1, px, s.dir == 1 ? "HL" : "LH", fade(c, 30), label.style_label_right)
@@ -442,22 +611,17 @@ enterTrade(Setup s, float px) =>
     s.entry := px
     s.entryBar := bar_index
     s.phase := 3
+    float meas = math.max(s.spikeSize, syminfo.mintick)
     if s.dir == 1
-        float rawSl = s.origin - thresh
-        s.sl := rawSl
-        float risk = includeThreshInRR ? s.entry - s.sl : s.entry - s.origin
-        risk := math.max(risk, syminfo.mintick)
-        s.tpL2 := s.entry + s.spikeSize
-        s.tp1 := s.entry + risk
-        s.tp2 := s.entry + risk * rrRatio
+        s.sl := s.origin - thresh
+        s.tpL2 := s.entry + meas
+        s.tp1 := s.entry + meas
+        s.tp2 := s.entry + meas * 2.0
     else
-        float rawSl = s.origin + thresh
-        s.sl := rawSl
-        float risk = includeThreshInRR ? s.sl - s.entry : s.origin - s.entry
-        risk := math.max(risk, syminfo.mintick)
-        s.tpL2 := s.entry - s.spikeSize
-        s.tp1 := s.entry - risk
-        s.tp2 := s.entry - risk * rrRatio
+        s.sl := s.origin + thresh
+        s.tpL2 := s.entry - meas
+        s.tp1 := s.entry - meas
+        s.tp2 := s.entry - meas * 2.0
     true
 
 capHist() =>
@@ -473,8 +637,22 @@ clearHist() =>
         array.clear(hist)
     true
 
+legSpan(float y1, float y2) =>
+    math.abs(y2 - y1)
+
+safeAtr(float atrNow) =>
+    na(atrNow) or atrNow <= 0 ? syminfo.mintick * 50.0 : atrNow
+
+needSize(float atrNow) =>
+    math.max(safeAtr(atrNow) * minLegAtr, minLegPrice)
+
 legSizeOk(float y1, float y2, float atrNow) =>
-    math.abs(y2 - y1) >= atrNow * minLegAtr
+    legSpan(y1, y2) >= needSize(atrNow)
+
+reversalEnough(float swing, float retr, float atrNow) =>
+    float needPct = swing * reversalPct / 100.0
+    float needAtr = safeAtr(atrNow) * minReversalAtr
+    swing > 0 and retr >= math.max(needPct, needAtr)
 
 trimZzLegs() =>
     if array.size(zzLegs) > maxLegsKeep
@@ -483,43 +661,82 @@ trimZzLegs() =>
             line.delete(old.ln)
         if not na(old.lb)
             label.delete(old.lb)
+        if not na(old.bx)
+            box.delete(old.bx)
     true
+
+findUnpairedL1(int avoidDir) =>
+    int idx = -1
+    int n = array.size(zzLegs)
+    if n > 0
+        for i = n - 1 to 0
+            ZzLeg lg = array.get(zzLegs, i)
+            if lg.kind == "L1" and not lg.hasPair and lg.dir != avoidDir
+                idx := i
+                break
+    idx
+
+awaitingCorrEnd() =>
+    findUnpairedL1(zzDir) >= 0
+
+spawnL2(int l1i, int x1, float y1) =>
+    ZzLeg l1 = array.get(zzLegs, l1i)
+    float meas = not na(l1.meas) ? l1.meas : math.abs(l1.y2 - l1.y1)
+    int dir = l1.dir
+    color c = fade(cssOf(dir), 0)
+    float y2 = dir == 1 ? y1 + meas : y1 - meas
+    int x2 = math.max(x1 + 1, bar_index)
+    box bx = pairBox(x1, y1, x2, meas, dir, c)
+    label lb = na
+    if showLegLabels
+        lb := label.new(math.round(math.avg(x1, x2)), math.avg(y1, y2), "L2", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
+    l1.hasPair := true
+    array.set(zzLegs, l1i, l1)
+    array.push(zzLegs, ZzLeg.new(dir, x1, x2, y1, y2, na, lb, bx, meas, "L2", true, false))
+    spawnLevels(dir, l1.x1, x1, l1.y1, y1, meas)
+    trimZzLegs()
+    true
+
+corrFinished(float swing, float retr, int bars, float atrNow) =>
+    bool bounce = retr >= swing * corrEndPct / 100.0 or (atrNow > 0 and retr >= atrNow * corrEndAtr)
+    swing > 0 and bars >= minCorrBars and bounce
 
 redrawLastZzLeg() =>
     int n = array.size(zzLegs)
     int p = array.size(zzPts)
     if n > 0 and p >= 2
         ZzLeg lg = array.get(zzLegs, n - 1)
-        ZzPt a = array.get(zzPts, p - 2)
-        ZzPt b = array.get(zzPts, p - 1)
-        if not na(lg.ln)
-            line.set_xy1(lg.ln, a.bar, a.px)
-            line.set_xy2(lg.ln, b.bar, b.px)
-        if not na(lg.lb)
-            label.set_xy(lg.lb, math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px))
+        if lg.kind == "L1"
+            ZzPt a = array.get(zzPts, p - 2)
+            ZzPt b = array.get(zzPts, p - 1)
+            if not na(lg.lb)
+                label.set_xy(lg.lb, math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px))
+            if not na(lg.bx)
+                box.set_lefttop(lg.bx, a.bar, math.max(a.px, b.px))
+                box.set_rightbottom(lg.bx, b.bar, math.min(a.px, b.px))
     true
 
 pushZzLeg(ZzPt a, ZzPt b, float atrNow) =>
     int dir = b.px > a.px ? 1 : b.px < a.px ? -1 : 0
-    bool ok = dir != 0 and legSizeOk(a.px, b.px, atrNow)
+    int bars = math.abs(b.bar - a.bar)
+    float meas = math.abs(b.px - a.px)
+    bool isL1 = dir != 0 and meas > 0 and bars >= minLegBars and legSizeOk(a.px, b.px, atrNow)
+    bool isCorr = dir != 0 and meas > 0 and bars >= minCorrBars
+    bool ok = isL1 or isCorr
     if ok
+        int mate = findUnpairedL1(dir)
+        string txt = isL1 ? "L1" : "C"
         color c = fade(cssOf(dir), 0)
-        line ln = line.new(a.bar, a.px, b.bar, b.px, xloc.bar_index, extend.none, c, line.style_solid, 2)
-        string txt = "L1"
-        if array.size(zzLegs) >= 2
-            ZzLeg corr = array.get(zzLegs, array.size(zzLegs) - 1)
-            ZzLeg first = array.get(zzLegs, array.size(zzLegs) - 2)
-            if first.dir == dir and corr.dir != dir
-                txt := "L2"
-            else if corr.dir != dir
-                txt := "C"
-        else if array.size(zzLegs) >= 1
-            ZzLeg prev = array.get(zzLegs, array.size(zzLegs) - 1)
-            if prev.dir != dir
-                txt := "C"
-        label lb = label.new(math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px), txt, xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
-        array.push(zzLegs, ZzLeg.new(dir, a.bar, b.bar, a.px, b.px, ln, lb))
+        label lb = na
+        box bx = na
+        if isL1
+            bx := pairBox(a.bar, a.px, b.bar, meas, dir, c)
+            if showLegLabels
+                lb := label.new(math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px), "L1", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
+        array.push(zzLegs, ZzLeg.new(dir, a.bar, b.bar, a.px, b.px, na, lb, bx, meas, txt, false, false))
         trimZzLegs()
+        if mate >= 0
+            spawnL2(mate, b.bar, b.px)
     true
 
 addZzPt(int b, float p, bool isHigh, float atrNow) =>
@@ -540,6 +757,14 @@ addZzPt(int b, float p, bool isHigh, float atrNow) =>
         array.push(zzPts, ZzPt.new(b, p, isHigh))
         true
 
+confirmMajorHigh(float atrNow) =>
+    addZzPt(zzStartBar, zzStartPx, false, atrNow)
+    addZzPt(zzExtBar, zzExtPx, true, atrNow)
+
+confirmMajorLow(float atrNow) =>
+    addZzPt(zzStartBar, zzStartPx, true, atrNow)
+    addZzPt(zzExtBar, zzExtPx, false, atrNow)
+
 // ================================================================================================
 // State
 // ================================================================================================
@@ -552,8 +777,10 @@ bool tpAlert = false
 bool slAlert = false
 
 atrVal = ta.atr(atrLen)
+float sizeNeed = needSize(atrVal)
 
 bool zzChanged = false
+bool zzL2Started = false
 if showLegs and bar_index > 3
     if zzDir == 0
         zzDir := close >= open ? 1 : -1
@@ -568,11 +795,20 @@ if showLegs and bar_index > 3
         else
             float rise = zzExtPx - zzStartPx
             float retr = zzExtPx - low
-            bool enough = rise > 0 and retr >= rise * reversalPct / 100.0 and rise >= atrVal * minLegAtr
-            if enough
-                addZzPt(zzStartBar, zzStartPx, false, atrVal)
-                addZzPt(zzExtBar, zzExtPx, true, atrVal)
+            int spanBars = zzExtBar - zzStartBar
+            bool easyC = awaitingCorrEnd()
+            bool major = rise >= sizeNeed and spanBars >= minLegBars and reversalEnough(rise, retr, atrVal)
+            bool corrEnd = easyC and corrFinished(rise, retr, spanBars, atrVal)
+            bool abandonTiny = not easyC and rise < sizeNeed and retr >= sizeNeed
+            if major or corrEnd
+                confirmMajorHigh(atrVal)
                 zzChanged := true
+                zzDir := -1
+                zzStartBar := zzExtBar
+                zzStartPx := zzExtPx
+                zzExtBar := bar_index
+                zzExtPx := low
+            else if abandonTiny
                 zzDir := -1
                 zzStartBar := zzExtBar
                 zzStartPx := zzExtPx
@@ -585,64 +821,106 @@ if showLegs and bar_index > 3
         else
             float drop = zzStartPx - zzExtPx
             float retr = high - zzExtPx
-            bool enough = drop > 0 and retr >= drop * reversalPct / 100.0 and drop >= atrVal * minLegAtr
-            if enough
-                addZzPt(zzStartBar, zzStartPx, true, atrVal)
-                addZzPt(zzExtBar, zzExtPx, false, atrVal)
+            int spanBars = zzExtBar - zzStartBar
+            bool easyC = awaitingCorrEnd()
+            bool major = drop >= sizeNeed and spanBars >= minLegBars and reversalEnough(drop, retr, atrVal)
+            bool corrEnd = easyC and corrFinished(drop, retr, spanBars, atrVal)
+            bool abandonTiny = not easyC and drop < sizeNeed and retr >= sizeNeed
+            if major or corrEnd
+                confirmMajorLow(atrVal)
                 zzChanged := true
                 zzDir := 1
                 zzStartBar := zzExtBar
                 zzStartPx := zzExtPx
                 zzExtBar := bar_index
                 zzExtPx := high
-    if zzChanged and showL2Proj
-        if not na(zzL2proj)
-            line.delete(zzL2proj)
-            zzL2proj := na
-        if not na(zzL2lbl)
-            label.delete(zzL2lbl)
-            zzL2lbl := na
-        if array.size(zzLegs) >= 3
-            int nzz = array.size(zzLegs)
-            ZzLeg zLast = array.get(zzLegs, nzz - 1)
-            ZzLeg zCorr = array.get(zzLegs, nzz - 2)
-            ZzLeg zFirst = array.get(zzLegs, nzz - 3)
-            if zLast.dir == zFirst.dir and zCorr.dir != zLast.dir
-                float size1 = math.abs(zFirst.y2 - zFirst.y1)
-                float tgt = zLast.dir == 1 ? zLast.y1 + size1 : zLast.y1 - size1
-                color zc = fade(cssOf(zLast.dir), 0)
-                zzL2proj := line.new(zLast.x1, tgt, math.max(zLast.x2, bar_index), tgt, xloc.bar_index, extend.right, zc, line.style_dashed, 2)
-                zzL2lbl := label.new(math.max(zLast.x2, bar_index), tgt, "L2 target", xloc.bar_index, yloc.price, zc, label.style_label_left, color.white, size.small)
+            else if abandonTiny
+                zzDir := 1
+                zzStartBar := zzExtBar
+                zzStartPx := zzExtPx
+                zzExtBar := bar_index
+                zzExtPx := high
+    if zzChanged and array.size(zzLegs) > 0
+        ZzLeg justEnded = array.get(zzLegs, array.size(zzLegs) - 1)
+        zzL2Started := justEnded.kind == "L2"
+    if array.size(zzLegs) > 0
+        for i = 0 to array.size(zzLegs) - 1
+            ZzLeg lg = array.get(zzLegs, i)
+            if lg.kind == "L2" and not lg.frozen and not na(lg.bx)
+                int x2 = bar_index
+                bool hit = lg.dir == 1 ? high >= lg.y2 : low <= lg.y2
+                if hit
+                    lg.frozen := true
+                    x2 := bar_index
+                box.set_right(lg.bx, x2)
+                if not na(lg.lb)
+                    label.set_x(lg.lb, math.round(math.avg(lg.x1, x2)))
+                array.set(zzLegs, i, lg)
+    if showSp2lLevels and array.size(spPairs) > 0
+        for p = 0 to array.size(spPairs) - 1
+            Sp2lDraw pr = array.get(spPairs, p)
+            if not pr.frozen
+                int x2p = bar_index
+                bool hitTp2 = pr.dir == 1 ? high >= pr.tp2 : low <= pr.tp2
+                bool hitSl = pr.dir == 1 ? low <= pr.sl : high >= pr.sl
+                if hitTp2 or hitSl
+                    pr.frozen := true
+                if not na(pr.lnSl)
+                    line.set_x2(pr.lnSl, x2p)
+                if not na(pr.lnEntry)
+                    line.set_x2(pr.lnEntry, x2p)
+                if not na(pr.lnTp1)
+                    line.set_x2(pr.lnTp1, x2p)
+                if not na(pr.lnTp2)
+                    line.set_x2(pr.lnTp2, x2p)
+                if not na(pr.lbSl)
+                    label.set_x(pr.lbSl, x2p)
+                if not na(pr.lbEn)
+                    label.set_x(pr.lbEn, x2p)
+                if not na(pr.lbT1)
+                    label.set_x(pr.lbT1, x2p)
+                if not na(pr.lbT2)
+                    label.set_x(pr.lbT2, x2p)
+                array.set(spPairs, p, pr)
+    bool openL2 = false
+    if array.size(zzLegs) > 0
+        for j = 0 to array.size(zzLegs) - 1
+            ZzLeg lg2 = array.get(zzLegs, j)
+            if lg2.kind == "L2" and not lg2.frozen and lg2.dir == zzDir
+                openL2 := true
+    bool formingL1 = not awaitingCorrEnd() and not openL2 and math.abs(zzExtPx - zzStartPx) >= sizeNeed * 0.35
     color lc = fade(cssOf(zzDir == 0 ? 1 : zzDir), 0)
-    if na(zzLive)
-        zzLive := line.new(zzStartBar, zzStartPx, zzExtBar, zzExtPx, xloc.bar_index, extend.none, lc, line.style_solid, 3)
+    if formingL1
+        float liveTop = math.max(zzStartPx, zzExtPx)
+        float liveBot = math.min(zzStartPx, zzExtPx)
+        if na(zzLiveBox)
+            zzLiveBox := box.new(zzStartBar, liveTop, math.max(zzExtBar, bar_index), liveBot, border_color = fade(lc, 25), bgcolor = fade(lc, boxTransp), border_width = 2)
+        else
+            box.set_lefttop(zzLiveBox, zzStartBar, liveTop)
+            box.set_rightbottom(zzLiveBox, math.max(zzExtBar, bar_index), liveBot)
+        if showLegLabels
+            int midX = math.round(math.avg(zzStartBar, math.max(zzExtBar, bar_index)))
+            float midY = math.avg(zzStartPx, zzExtPx)
+            if na(zzLiveLbl)
+                zzLiveLbl := label.new(midX, midY, "L1", xloc.bar_index, yloc.price, lc, label.style_label_left, color.white, size.small)
+            else
+                label.set_xy(zzLiveLbl, midX, midY)
+                label.set_text(zzLiveLbl, "L1")
+                label.set_color(zzLiveLbl, lc)
     else
-        line.set_xy1(zzLive, zzStartBar, zzStartPx)
-        line.set_xy2(zzLive, zzExtBar, zzExtPx)
-        line.set_color(zzLive, lc)
-    string liveTxt = zzDir == 1 ? "Leg ↑" : "Leg ↓"
-    int midX = math.round(math.avg(zzStartBar, zzExtBar))
-    float midY = math.avg(zzStartPx, zzExtPx)
-    if na(zzLiveLbl)
-        zzLiveLbl := label.new(midX, midY, liveTxt, xloc.bar_index, yloc.price, lc, zzDir == 1 ? label.style_label_up : label.style_label_down, color.white, size.normal)
-    else
-        label.set_xy(zzLiveLbl, midX, midY)
-        label.set_text(zzLiveLbl, liveTxt)
-        label.set_color(zzLiveLbl, lc)
-        label.set_style(zzLiveLbl, zzDir == 1 ? label.style_label_up : label.style_label_down)
-    if showL2Proj and not na(zzL2proj)
-        line.set_x2(zzL2proj, bar_index)
+        if not na(zzLive)
+            line.delete(zzLive)
+            zzLive := na
+        if not na(zzLiveLbl)
+            label.delete(zzLiveLbl)
+            zzLiveLbl := na
+        if not na(zzLiveBox)
+            box.delete(zzLiveBox)
+            zzLiveBox := na
 
 initArrays(cur)
 
 if bar_index > maxSpikeBars + 5
-    int bullRun = countRun(1, 0, maxSpikeBars, maxDojiBody, dojiTolerance)
-    int bearRun = countRun(-1, 0, maxSpikeBars, maxDojiBody, dojiTolerance)
-    int bullDone = countRun(1, 1, maxSpikeBars, maxDojiBody, dojiTolerance)
-    int bearDone = countRun(-1, 1, maxSpikeBars, maxDojiBody, dojiTolerance)
-    bool bullBroke = bullRun == 0 and bullDone >= minSpikeBars
-    bool bearBroke = bearRun == 0 and bearDone >= minSpikeBars
-
     // Close trade
     if cur.phase == 3
         bool hitSl = cur.dir == 1 ? low <= cur.sl : high >= cur.sl
@@ -661,59 +939,97 @@ if bar_index > maxSpikeBars + 5
             cur := Setup.new()
             initArrays(cur)
 
-    // Invalidate / expire only after the spike has finished (waiting for retest)
+    // Invalidate / expire while waiting for retest
     if cur.phase == 2
         bool broken = cur.dir == 1 ? low < cur.origin : high > cur.origin
         bool expired = bar_index - cur.endBar > maxWaitBars
         if broken or expired
             resetSetup(cur)
 
-    // Spike just completed → freeze and wait for HL/LH retest
-    bool newComplete = false
-    if cur.phase == 0 or cur.phase == 1
-        if bullBroke and validateSpike(1, 1, bullDone, atrVal)
-            if onlyLast
-                clearHist()
-            fillSpike(cur, 1, 1, bullDone)
-            cur.phase := 2
-            spikeAlert := true
-            bosAlert := true
-            newComplete := true
-            redrawSetup(cur)
-        else if bearBroke and validateSpike(-1, 1, bearDone, atrVal)
-            if onlyLast
-                clearHist()
-            fillSpike(cur, -1, 1, bearDone)
-            cur.phase := 2
-            spikeAlert := true
-            bosAlert := true
-            newComplete := true
-            redrawSetup(cur)
-        else if cur.phase == 1 and ((cur.dir == 1 and bullBroke) or (cur.dir == -1 and bearBroke))
-            cur.phase := 2
-            spikeAlert := true
-            bosAlert := true
-            newComplete := true
-            redrawSetup(cur)
+    // Major-leg SP2L: L1 + C confirmed, live swing is L2
+    if not useCandleSpike and showLegs
+        if zzL2Started and (cur.phase == 0 or cur.phase == 1 or cur.phase == 2) and array.size(zzLegs) >= 2
+            ZzLeg l2Leg = array.get(zzLegs, array.size(zzLegs) - 1)
+            if l2Leg.kind == "L2"
+                ZzLeg corrLeg = array.get(zzLegs, array.size(zzLegs) - 2)
+                ZzLeg l1Leg = corrLeg
+                if array.size(zzLegs) >= 3
+                    for k = array.size(zzLegs) - 3 to 0
+                        ZzLeg cand = array.get(zzLegs, k)
+                        if cand.kind == "L1" and cand.dir == l2Leg.dir and cand.hasPair
+                            l1Leg := cand
+                            break
+                if onlyLast
+                    clearHist()
+                resetSetup(cur)
+                fillFromMajorLegs(cur, l1Leg, corrLeg, atrVal)
+                enterTrade(cur, corrLeg.y2)
+                if cur.dir == 1
+                    entryBuyAlert := true
+                else
+                    entrySellAlert := true
+                spikeAlert := true
+                bosAlert := true
+                if not showSp2lLevels
+                    redrawSetup(cur)
+        else if cur.phase == 2 and cur.dir == zzDir
+            cur.extreme := zzExtPx
+            bool newLvl = addLiveLevel(cur, atrVal)
+            if newLvl and displayMode == "Setup"
+                redrawSetup(cur)
 
-    // Forming spike — refresh while the run continues
-    if not newComplete and (cur.phase == 0 or cur.phase == 1)
-        bool took = false
-        if bullRun >= minSpikeBars and validateSpike(1, 0, bullRun - 1, atrVal)
-            if cur.phase == 0 and onlyLast
-                clearHist()
-            fillSpike(cur, 1, 0, bullRun - 1)
-            cur.phase := 1
-            took := true
-            redrawSetup(cur)
-        if not took and bearRun >= minSpikeBars and validateSpike(-1, 0, bearRun - 1, atrVal)
-            if cur.phase == 0 and onlyLast
-                clearHist()
-            fillSpike(cur, -1, 0, bearRun - 1)
-            cur.phase := 1
-            redrawSetup(cur)
+    if useCandleSpike
+        int bullRun = countRun(1, 0, maxSpikeBars, maxDojiBody, dojiTolerance)
+        int bearRun = countRun(-1, 0, maxSpikeBars, maxDojiBody, dojiTolerance)
+        int bullDone = countRun(1, 1, maxSpikeBars, maxDojiBody, dojiTolerance)
+        int bearDone = countRun(-1, 1, maxSpikeBars, maxDojiBody, dojiTolerance)
+        bool bullBroke = bullRun == 0 and bullDone >= minSpikeBars
+        bool bearBroke = bearRun == 0 and bearDone >= minSpikeBars
 
-    // Retest entry only after the spike has finished (not on every HL inside the move)
+        bool newComplete = false
+        if cur.phase == 0 or cur.phase == 1
+            if bullBroke and validateSpike(1, 1, bullDone, atrVal)
+                if onlyLast
+                    clearHist()
+                fillSpike(cur, 1, 1, bullDone)
+                cur.phase := 2
+                spikeAlert := true
+                bosAlert := true
+                newComplete := true
+                redrawSetup(cur)
+            else if bearBroke and validateSpike(-1, 1, bearDone, atrVal)
+                if onlyLast
+                    clearHist()
+                fillSpike(cur, -1, 1, bearDone)
+                cur.phase := 2
+                spikeAlert := true
+                bosAlert := true
+                newComplete := true
+                redrawSetup(cur)
+            else if cur.phase == 1 and ((cur.dir == 1 and bullBroke) or (cur.dir == -1 and bearBroke))
+                cur.phase := 2
+                spikeAlert := true
+                bosAlert := true
+                newComplete := true
+                redrawSetup(cur)
+
+        if not newComplete and (cur.phase == 0 or cur.phase == 1)
+            bool took = false
+            if bullRun >= minSpikeBars and validateSpike(1, 0, bullRun - 1, atrVal)
+                if cur.phase == 0 and onlyLast
+                    clearHist()
+                fillSpike(cur, 1, 0, bullRun - 1)
+                cur.phase := 1
+                took := true
+                redrawSetup(cur)
+            if not took and bearRun >= minSpikeBars and validateSpike(-1, 0, bearRun - 1, atrVal)
+                if cur.phase == 0 and onlyLast
+                    clearHist()
+                fillSpike(cur, -1, 0, bearRun - 1)
+                cur.phase := 1
+                redrawSetup(cur)
+
+    // Retest of HL/LH inside the second major leg
     if cur.phase == 2 and not na(cur.lvlPx) and array.size(cur.lvlPx) > 0
         float best = na
         int bestIdx = -1
