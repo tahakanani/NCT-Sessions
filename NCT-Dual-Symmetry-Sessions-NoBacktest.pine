@@ -534,35 +534,45 @@ var g_stagOtX     = array.new<int>()
 
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 var GRP_LBL = "Target Label Anti-Overlap"
-targetLabelPriceTolerancePct = input.float(1.5, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.05, group = GRP_LBL, tooltip = 'اگر دو لیبل هم‌مسیر (صعود یا نزول) از نظر قیمت نزدیک باشند، یکی به راست جابه‌جا می‌شود')
-targetLabelStaggerStep = input.int(40, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'فاصلهٔ افقی هر لیبل متداخل به سمت راست')
+targetLabelPriceTolerancePct = input.float(0.35, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_LBL, tooltip = 'فقط اگر دو لیبل هم‌مسیر قیمت نزدیک داشته باشند به راست جابه‌جا می‌شود')
+targetLabelStaggerStep = input.int(20, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'گام جابجایی به راست؛ فقط تا انتهای همان خط تارگت')
 targetLabelYOffsetPct = input.float(0.01, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.01, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 // lane: 0 = صعود (H)، 1 = نزول (L)، 2 = سایر (سشن/MAP/Day)
-getStaggerX(float price, int baseX, int lane) =>
+// جابجایی فقط بین baseX تا maxX (انتهای همان خط) — نه تا +490
+getStaggerX(float price, int baseX, int lane, int maxX) =>
     array<float> prices = lane == 0 ? g_stagUpPrice : lane == 1 ? g_stagDnPrice : g_stagOtPrice
     array<int> xs = lane == 0 ? g_stagUpX : lane == 1 ? g_stagDnX : g_stagOtX
-    int maxX = bar_index + 490
-    int x = math.min(math.max(baseX, bar_index), maxX)
-    bool collision = true
+    int lo = math.min(math.max(baseX, bar_index), maxX)
+    int hi = math.max(lo, maxX)
+    int step = math.max(targetLabelStaggerStep, 4)
+    int span = math.max(hi - lo, step)
+    int x = lo
+    bool placed = false
     int guard = 0
-    while collision and guard < 80
-        collision := false
+    while not placed and guard < 80
+        bool collision = false
         n = xs.size()
         if n > 0
             for i = 0 to n - 1
-                int ox = xs.get(i)
-                if math.abs(ox - x) < targetLabelStaggerStep
+                if math.abs(xs.get(i) - x) < step
                     p = prices.get(i)
                     refP = math.max(math.abs(p), 0.0000001)
                     diffPct = math.abs(p - price) / refP * 100.0
-                    // فقط لیبل‌های هم‌مسیر با قیمت نزدیک جابه‌جا می‌شوند
                     if diffPct <= targetLabelPriceTolerancePct
                         collision := true
                         break
-        if collision
-            x := math.min(x + targetLabelStaggerStep, maxX)
+        if not collision
+            placed := true
+        else
+            x := x + step
+            if x > hi
+                // فضای خط پر شد: داخل همان بازهٔ خط پخش کن، نه بیرون از خط
+                int slot = xs.size()
+                x := lo + (slot * step) % span
+                x := math.min(math.max(x, lo), hi)
+                placed := true
         guard += 1
     prices.push(price)
     xs.push(x)
@@ -595,9 +605,12 @@ textSizeFromString(string s) =>
         'Small'  => size.small
         => size.tiny
 
-// نقطهٔ شروع لیبل = وسطِ بازه از کندل جاری تا انتهای خط
+// شروع نوشته از وسط طول خط؛ جابجایی فقط تا انتهای همان خط
 targetLabelBaseX(int gapBars) =>
     int(bar_index + math.max(gapBars / 2, 8))
+
+targetLabelMaxX(int gapBars) =>
+    bar_index + math.max(gapBars, 10)
 
 // Y لیبل کمی بالاتر از قیمت خط؛ دقیقاً بر اساس درصد تنظیم‌شده (گام ۰.۰۱)
 labelYAboveLine(float price) =>
@@ -606,13 +619,14 @@ labelYAboveLine(float price) =>
 styleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
-// lane: 0 صعود، 1 نزول، 2 سایر — خط تا محل لیبل ادامه دارد؛ نوشته بالای خط
+// lane: 0 صعود، 1 نزول، 2 سایر
+// خط تا انتهای gap؛ نوشته از وسط همان خط به راست جابه‌جا می‌شود (نه انتهای خیلی دور)
 drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars, int lane) =>
     if not na(price) and canDrawLine()
-        int baseX = targetLabelBaseX(gapBars)
-        int lblX = getStaggerX(price, baseX, lane)
-        int endIdx = math.max(bar_index + gapBars, lblX)
-        trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(endIdx, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
+        int lineEnd = targetLabelMaxX(gapBars)
+        int baseX = math.min(targetLabelBaseX(gapBars), lineEnd)
+        int lblX = getStaggerX(price, baseX, lane, lineEnd)
+        trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(lineEnd, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
         if canDrawLabel()
             trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
 
@@ -1556,13 +1570,14 @@ else if na(mapPwHigh) or na(mapPwLow)
 drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int startTime, int endTime, int labelBarX) =>
     if not na(price) and not na(startTime) and not na(time) and canDrawLine()
         lnStyle = styleFromString(styleStr)
-        int baseX = targetLabelBaseX(mapExtendBars)
-        int lblX = mapShowLabels ? getStaggerX(price, baseX, 2) : math.max(bar_index + mapExtendBars, baseX)
-        int endIdx = math.max(bar_index + mapExtendBars, lblX)
+        int lineEnd = targetLabelMaxX(mapExtendBars)
+        int baseX = math.min(targetLabelBaseX(mapExtendBars), lineEnd)
+        int lblX = mapShowLabels ? getStaggerX(price, baseX, 2, lineEnd) : lineEnd
+        int endIdx = lineEnd
         int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
-        int lineEndTime = math.max(nz(endTime, time), time + (endIdx - bar_index) * tfMs)
+        int lineEndTime = time + (endIdx - bar_index) * tfMs
         chart.point p1 = chart.point.from_time(startTime, price)
-        chart.point p2 = chart.point.from_time(lineEndTime, price)
+        chart.point p2 = chart.point.from_time(math.max(nz(endTime, time), lineEndTime), price)
         trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawLabel()
             trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
@@ -1845,7 +1860,7 @@ if bar_index == last_bar_index
         boxBot = math.min(open_today_price, close_yesterday_price)
         ocBox = box.new(left = bar_index, top = boxTop, right = bar_index + targetLabelGapBars, bottom = boxBot, bgcolor = dayOCBoxBgColor, border_color = color.new(color.white, 70), border_width = 1, border_style = line.style_solid)
         trackBox(ocBox)
-        ocLbl = label.new(x = getStaggerX(boxTop, bar_index + targetLabelGapBars, 2), y = boxTop, text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
+        ocLbl = label.new(x = getStaggerX(boxTop, bar_index + int(targetLabelGapBars / 2), 2, bar_index + targetLabelGapBars), y = labelYAboveLine(boxTop), text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
         trackLabel(ocLbl)
 
     // تارگت‌های زمانی عمودی — امروز + روزهای قبلی (Display Days)
