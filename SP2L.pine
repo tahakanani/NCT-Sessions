@@ -22,7 +22,7 @@ zzDepth = input.int(12, "Depth", minval = 1, step = 1, group = grpLeg)
 zzDeviation = input.int(5, "Deviation", minval = 1, step = 1, group = grpLeg, tooltip = "حداقل حرکت بین سقف و کف بر حسب پوینت")
 zzBackstep = input.int(2, "Backstep", minval = 2, step = 1, group = grpLeg)
 minLegAtr = input.float(0.5, "Min Leg Size × ATR", minval = 0.0, step = 0.1, group = grpLeg)
-maxLegsKeep = input.int(25, "Max Legs On Chart", minval = 4, maxval = 80, group = grpLeg)
+maxLegsKeep = input.int(400, "Max Legs On Chart", minval = 4, maxval = 500, group = grpLeg, tooltip = "سقف خطوط زیگ‌زاگ؛ حداکثر تریدینگ‌ویو 500 خط است")
 showL2Proj = input.bool(false, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
@@ -479,13 +479,11 @@ redrawSetup(Setup s) =>
                 int x1e = s.entryBar
                 int x2e = bar_index
                 s.lnEntry := line.new(x1e, s.entry, x2e, s.entry, xloc.bar_index, extend.right, fade(c, 0), line.style_solid, 2)
-                s.lnSl := line.new(x1e, s.sl, x2e, s.sl, xloc.bar_index, extend.right, color.new(color.red, 0), line.style_dotted, 2)
                 s.lnL2 := line.new(x1e, s.tpL2, x2e, s.tpL2, xloc.bar_index, extend.right, fade(c, 0), line.style_solid, 2)
                 if showTpRr
                     s.lnTp1 := line.new(x1e, s.tp1, x2e, s.tp1, xloc.bar_index, extend.right, color.new(color.orange, 20), line.style_dashed, 1)
                     s.lnTp2 := line.new(x1e, s.tp2, x2e, s.tp2, xloc.bar_index, extend.right, color.new(color.orange, 0), line.style_dashed, 1)
                 drawLabel(s, x1e, s.entry, "Entry", fade(c, 0), label.style_label_left)
-                drawLabel(s, x1e, s.sl, "SL", color.new(color.red, 0), label.style_label_left)
                 drawLabel(s, x1e, s.tpL2, "L2", fade(c, 0), label.style_label_left)
         true
 
