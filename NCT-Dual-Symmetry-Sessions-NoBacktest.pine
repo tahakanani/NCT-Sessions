@@ -630,7 +630,7 @@ drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string 
         if canDrawLabel()
             trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
 
-method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes) =>
+method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct) =>
     array<Node> nodesRef = array.new<Node>()
     var locText = yloc.belowbar
     if swUptrendType
@@ -642,7 +642,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
     text_node_size_opt = this.settings.text_node_size
     indexColor = 0
     countNodes = nodesRef.size()
-    bool usePriceOffset = nodeLabelDistPct > 0.0
+    bool usePriceOffset = labelDistPct > 0.0
 
     gapPrefix = ""
     if extraGapLines > 0
@@ -667,7 +667,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
             shouldDraw = node.isSymmetrySetup ? showDoubleStarNodes : showRegularNodes
             if shouldDraw and canDrawLabel()
                 if usePriceOffset
-                    float dist = math.abs(node.highNode) * nodeLabelDistPct / 100.0
+                    float dist = math.abs(node.highNode) * labelDistPct / 100.0
                     // صعود: بالای قله | نزول: پایین کف (highNode در نزول = کف حرکت)
                     float lblY = swUptrendType ? node.highNode + dist : node.highNode - dist
                     lbl = label.new(x = index, y = lblY, text = newText, yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt))
@@ -1127,14 +1127,14 @@ if bar_index == last_bar_index
 
     if showStarred
         if cNodeSym.nodesUp.size() > 0
-            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput)
+            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
         if cNodeSym.nodesDown.size() > 0
-            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput)
+            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
     if showStarless
         if cNodeNoSym.nodesUp.size() > 0
-            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false)
+            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct)
         if cNodeNoSym.nodesDown.size() > 0
-            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false)
+            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct)
 
     NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
 
