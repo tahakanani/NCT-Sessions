@@ -396,13 +396,6 @@ pairCssOf(int id) =>
         c := #9CCC65
     c
 
-assignPairCss(Setup s) =>
-    if s.pairId == 0
-        pairSeq += 1
-        s.pairId := pairSeq
-        s.pairCss := pairCssOf(pairSeq)
-    true
-
 fillZzSpike(Setup s, int dir, int startBar, int endBar, float origin, float extreme) =>
     initArrays(s)
     s.dir := dir
@@ -411,7 +404,6 @@ fillZzSpike(Setup s, int dir, int startBar, int endBar, float origin, float extr
     s.origin := origin
     s.extreme := extreme
     s.spikeSize := math.abs(extreme - origin)
-    assignPairCss(s)
     s.corrPx := na
     s.corrBar := 0
     s.corrHadBounce := false
@@ -767,6 +759,10 @@ if zzJustConfirmed and (cur.phase == 0 or cur.phase == 1)
         if onlyLast
             clearHist()
         fillZzSpike(cur, zzConfDir, zzConfStartBar, zzConfEndBar, zzConfOrig, zzConfExt)
+        if cur.pairId == 0
+            pairSeq += 1
+            cur.pairId := pairSeq
+            cur.pairCss := pairCssOf(pairSeq)
         cur.phase := 2
         spikeAlert := true
         bosAlert := true
@@ -780,6 +776,10 @@ if not newComplete and (cur.phase == 0 or cur.phase == 1) and zzDir != 0
         if cur.phase == 0 and onlyLast
             clearHist()
         fillZzSpike(cur, zzDir, zzStartBar, zzExtBar, zzStartPx, zzExtPx)
+        if cur.pairId == 0
+            pairSeq += 1
+            cur.pairId := pairSeq
+            cur.pairCss := pairCssOf(pairSeq)
         cur.phase := 1
         redrawSetup(cur)
     else if cur.phase == 1
