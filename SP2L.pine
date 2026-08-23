@@ -12,8 +12,6 @@ useMovePower = input.bool(false, "Movement Power", group = grpSpike)
 movePowerLevel = input.float(0.8, "Movement Power Level", minval = 0.1, step = 0.1, group = grpSpike, tooltip = "آستانهٔ range اسپایک نسبت به ATR؛ بالاتر = فقط اسپایک‌های قوی")
 atrLen = input.int(14, "ATR Length", minval = 1, group = grpSpike)
 maxSpikeBars = input.int(80, "Max Spike Bars", minval = 3, maxval = 150, group = grpSpike)
-allowInternalPb = input.bool(true, "Allow Internal Pullback", group = grpSpike, tooltip = "پولبک کم‌عمق وسط اسپایک را همان لگ حساب می‌کند")
-maxOppBars = input.int(5, "Max Opposite Bars", minval = 1, maxval = 15, group = grpSpike, tooltip = "حداکثر کندل مخالف پشت‌سرهم که هنوز لگ را قطع نکند")
 minDirRatio = input.float(0.40, "Min Directional Bar Ratio", minval = 0.3, maxval = 1.0, step = 0.05, group = grpSpike)
 
 grpLeg = "Leg Detection (ZigZag)"
@@ -25,23 +23,6 @@ minLegAtr = input.float(0.5, "Min Leg Size × ATR", minval = 0.0, step = 0.1, gr
 maxLegsKeep = input.int(400, "Max Legs On Chart", minval = 4, maxval = 500, group = grpLeg, tooltip = "سقف خطوط زیگ‌زاگ؛ حداکثر تریدینگ‌ویو 500 خط است")
 showL2Proj = input.bool(false, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
-
-grpGap = "Spike Filter | Gap"
-useGapFilter = input.bool(false, "Gap Filter", group = grpGap)
-gapType = input.string("All Gaps", "Gap Type", options = ["All Gaps", "Significant", "Structural", "Major"], group = grpGap)
-sigGapAtr = input.float(0.5, "Significant Gap × ATR", minval = 0.1, step = 0.1, group = grpGap)
-majGapAtr = input.float(1.0, "Major Gap × ATR", minval = 0.1, step = 0.1, group = grpGap)
-
-grpDoji = "Spike Filter | Doji"
-dojiTolerance = input.bool(true, "Doji Tolerance", group = grpDoji, tooltip = "اجازهٔ دوجی داخل اسپایک")
-maxDojiBody = input.float(0.15, "Max Doji Body Ratio", minval = 0.01, maxval = 0.5, step = 0.01, group = grpDoji)
-maxDojiInSpike = input.float(0.25, "Max Doji in Spike Ratio", minval = 0.0, maxval = 1.0, step = 0.05, group = grpDoji)
-
-grpTrend = "Trend Detection"
-useTrend = input.bool(false, "Trend Detection", group = grpTrend)
-trendDojiBody = input.float(0.15, "Max Doji Body Ratio", minval = 0.01, maxval = 0.5, step = 0.01, group = grpTrend)
-trendLookback = input.int(20, "Candle Lookback", minval = 3, maxval = 100, group = grpTrend)
-maxDojiInTrend = input.float(0.40, "Max Doji in Trend Ratio", minval = 0.0, maxval = 1.0, step = 0.05, group = grpTrend)
 
 grpPos = "Position Management"
 useSlThresh = input.bool(true, "Stop-Loss Threshold", group = grpPos)
@@ -129,10 +110,6 @@ var int pairSeq = 0
 // Helpers
 // ================================================================================================
 
-isDoji(int off, float bodyRatio) =>
-    float rng = high[off] - low[off]
-    rng <= 0 ? true : math.abs(close[off] - open[off]) / rng <= bodyRatio
-
 windowHigh(int newest, int oldest) =>
     float m = high[newest]
     if oldest >= newest
@@ -147,99 +124,23 @@ windowLow(int newest, int oldest) =>
             m := math.min(m, low[i])
     m
 
-countRun(int dir, int fromOff, int maxBars, float bodyRatio, bool allowDoji) =>
-    int n = 0
-    int opp = 0
-    int last = math.min(fromOff + maxBars - 1, bar_index)
-    if last >= fromOff
-        for i = fromOff to last
-            bool d = isDoji(i, bodyRatio)
-            bool up = close[i] > open[i]
-            bool down = close[i] < open[i]
-            bool dirOk = dir == 1 ? up : down
-            bool contra = dir == 1 ? down : up
-            if d
-                if not allowDoji
-                    break
-                n += 1
-                opp := 0
-            else if dirOk
-                n += 1
-                opp := 0
-            else if contra and allowInternalPb and opp < maxOppBars
-                n += 1
-                opp += 1
-            else
-                break
-    n
-
-trendOk() =>
-    bool ok = true
-    if useTrend
-        int d = 0
-        int n = math.min(trendLookback, bar_index + 1)
-        if n > 0
-            for i = 0 to n - 1
-                if isDoji(i, trendDojiBody)
-                    d += 1
-            ok := d / n <= maxDojiInTrend
-    ok
-
-gapMatches(float gap, float atrNow, string gType, int dir, int newest, int oldest) =>
-    bool ok = false
-    if gType == "All Gaps"
-        ok := gap > 0
-    else if gType == "Significant"
-        ok := gap >= atrNow * sigGapAtr
-    else if gType == "Major"
-        ok := gap >= atrNow * majGapAtr
-    else
-        bool sized = gap >= atrNow * sigGapAtr
-        bool brk = false
-        if oldest + 1 <= bar_index
-            brk := dir == 1 ? windowHigh(newest, oldest) > high[oldest + 1] : windowLow(newest, oldest) < low[oldest + 1]
-        ok := sized and brk
-    ok
-
-hasGap(int dir, int newest, int oldest, float atrNow) =>
-    bool found = false
-    if oldest - newest >= 2
-        for i = newest to oldest - 2
-            if dir == 1 and low[i] > high[i + 2]
-                float gap = low[i] - high[i + 2]
-                if gapMatches(gap, atrNow, gapType, dir, newest, oldest)
-                    found := true
-            else if dir == -1 and high[i] < low[i + 2]
-                float gap = low[i + 2] - high[i]
-                if gapMatches(gap, atrNow, gapType, dir, newest, oldest)
-                    found := true
-    found
-
 validateSpike(int dir, int newest, int oldest, float atrNow) =>
     int len = oldest - newest + 1
-    bool ok = len >= minSpikeBars and trendOk()
-    int dojis = 0
+    bool ok = len >= minSpikeBars
     int dirBars = 0
     if oldest >= newest
         for i = newest to oldest
-            bool d = isDoji(i, maxDojiBody)
             bool up = close[i] > open[i]
             bool down = close[i] < open[i]
-            if d
-                dojis += 1
-            else if dir == 1 and up or dir == -1 and down
+            if dir == 1 and up or dir == -1 and down
                 dirBars += 1
-    int nonDoji = len - dojis
-    ok := ok and (dojis / len <= maxDojiInSpike)
-    ok := ok and (nonDoji <= 0 or dirBars / nonDoji >= minDirRatio)
+    ok := ok and (len <= 0 or dirBars / len >= minDirRatio)
     float orig = dir == 1 ? windowLow(newest, oldest) : windowHigh(newest, oldest)
     float ext = dir == 1 ? windowHigh(newest, oldest) : windowLow(newest, oldest)
     float size = math.abs(ext - orig)
     ok := ok and size > 0
     if useMovePower
         ok := ok and atrNow > 0 and size / atrNow >= movePowerLevel
-    if useGapFilter
-        ok := ok and hasGap(dir, newest, oldest, atrNow)
     ok
 
 deleteLines(array<line> arr) =>
