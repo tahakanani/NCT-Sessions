@@ -740,7 +740,7 @@ if barstate.islast
     table.cell(wrTbl, 1, 3, str.tostring(wrPct, "#.0") + " %", text_color = color.white, text_halign = text.align_right)
     table.cell(wrTbl, 0, 4, "لات طلا", text_color = color.white, text_halign = text.align_left)
     table.cell(wrTbl, 1, 4, str.tostring(lotSize, "#.00"), text_color = color.white, text_halign = text.align_right)
-    table.cell(wrTbl, 0, 5, "سود کل $", text_color = pnlCss, text_halign = text.align_left)
+    table.cell(wrTbl, 0, 5, "سود خالص $", text_color = pnlCss, text_halign = text.align_left)
     table.cell(wrTbl, 1, 5, str.tostring(statPnl, "#.2"), text_color = pnlCss, text_halign = text.align_right)
     table.cell(wrTbl, 0, 6, "مانده $", text_color = color.white, text_halign = text.align_left)
     table.cell(wrTbl, 1, 6, str.tostring(equity, "#.2"), text_color = color.white, text_halign = text.align_right)
