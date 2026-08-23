@@ -27,6 +27,7 @@ levelPivot = input.int(5, "HL / LH Pivot Bars", minval = 3, maxval = 20, group =
 minLevelAtr = input.float(0.8, "Min HL Depth × ATR", minval = 0.2, step = 0.1, group = grpLeg)
 maxStructLevels = input.int(3, "Max HL / LH Lines", minval = 1, maxval = 6, group = grpLeg)
 maxLegsKeep = input.int(20, "Max Legs On Chart", minval = 4, maxval = 60, group = grpLeg)
+lookbackDays = input.int(3, "Lookback Days", minval = 1, maxval = 15, group = grpLeg, tooltip = "فقط لگ‌های این تعداد روز معاملاتی آخر رسم می‌مانند")
 corrEndPct = input.float(18.0, "Correction End %", minval = 5.0, maxval = 50.0, step = 1.0, group = grpLeg, tooltip = "بعد از L1، با این درصد برگشت از کف/سقف اصلاح، اصلاح تمام و L2 رسم می‌شود")
 corrEndAtr = input.float(0.35, "Correction End × ATR", minval = 0.1, step = 0.05, group = grpLeg)
 minCorrBars = input.int(2, "Min Correction Bars", minval = 1, maxval = 20, group = grpLeg)
@@ -151,6 +152,7 @@ var int zzStartBar = 0
 var float zzStartPx = na
 var int zzExtBar = 0
 var float zzExtPx = na
+var array<int> sessOpen = array.new<int>()
 
 // phase: 0 empty, 1 forming, 2 wait retest, 3 in trade, 4 closed
 
@@ -654,15 +656,72 @@ reversalEnough(float swing, float retr, float atrNow) =>
     float needAtr = safeAtr(atrNow) * minReversalAtr
     swing > 0 and retr >= math.max(needPct, needAtr)
 
+eraseLegDraw(ZzLeg lg) =>
+    if not na(lg.ln)
+        line.delete(lg.ln)
+        lg.ln := na
+    if not na(lg.lb)
+        label.delete(lg.lb)
+        lg.lb := na
+    if not na(lg.bx)
+        box.delete(lg.bx)
+        lg.bx := na
+    true
+
+barTime(int b) =>
+    int off = bar_index - b
+    off >= 0 and off <= bar_index ? time[off] : time
+
+windowStart() =>
+    array.size(sessOpen) > 0 ? array.get(sessOpen, 0) : time
+
+inLookback(int b) =>
+    barTime(b) >= windowStart()
+
+clearPairsAt(int x0) =>
+    if array.size(spPairs) > 0
+        int i = array.size(spPairs) - 1
+        while i >= 0
+            Sp2lDraw pr = array.get(spPairs, i)
+            if pr.x0 == x0
+                clearPairDraw(pr)
+                array.remove(spPairs, i)
+            i -= 1
+    true
+
+removeL1(int idx) =>
+    bool done = false
+    if idx >= 0 and idx < array.size(zzLegs)
+        ZzLeg lg = array.get(zzLegs, idx)
+        eraseLegDraw(lg)
+        clearPairsAt(lg.x1)
+        array.remove(zzLegs, idx)
+        done := true
+    done
+
+pruneOldDraws() =>
+    int n = array.size(zzLegs)
+    if n > 0
+        for i = 0 to n - 1
+            ZzLeg lg = array.get(zzLegs, i)
+            if not inLookback(lg.x1)
+                eraseLegDraw(lg)
+                array.set(zzLegs, i, lg)
+    if array.size(spPairs) > 0
+        int i = array.size(spPairs) - 1
+        while i >= 0
+            Sp2lDraw pr = array.get(spPairs, i)
+            if not inLookback(pr.x0)
+                clearPairDraw(pr)
+                array.remove(spPairs, i)
+            i -= 1
+    true
+
 trimZzLegs() =>
     if array.size(zzLegs) > maxLegsKeep
         ZzLeg old = array.shift(zzLegs)
-        if not na(old.ln)
-            line.delete(old.ln)
-        if not na(old.lb)
-            label.delete(old.lb)
-        if not na(old.bx)
-            box.delete(old.bx)
+        eraseLegDraw(old)
+        clearPairsAt(old.x1)
     true
 
 findUnpairedL1(int avoidDir) =>
@@ -686,14 +745,17 @@ spawnL2(int l1i, int x1, float y1) =>
     color c = fade(cssOf(dir), 0)
     float y2 = dir == 1 ? y1 + meas : y1 - meas
     int x2 = math.max(x1 + 1, bar_index)
-    box bx = pairBox(x1, y1, x2, meas, dir, c)
+    box bx = na
     label lb = na
-    if showLegLabels
-        lb := label.new(math.round(math.avg(x1, x2)), math.avg(y1, y2), "L2", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
+    if inLookback(x1)
+        bx := pairBox(x1, y1, x2, meas, dir, c)
+        if showLegLabels
+            lb := label.new(math.round(math.avg(x1, x2)), math.avg(y1, y2), "L2", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
     l1.hasPair := true
     array.set(zzLegs, l1i, l1)
     array.push(zzLegs, ZzLeg.new(dir, x1, x2, y1, y2, na, lb, bx, meas, "L2", true, false))
-    spawnLevels(dir, l1.x1, x1, l1.y1, y1, meas)
+    if inLookback(l1.x1)
+        spawnLevels(dir, l1.x1, x1, l1.y1, y1, meas)
     trimZzLegs()
     true
 
@@ -725,11 +787,17 @@ pushZzLeg(ZzPt a, ZzPt b, float atrNow) =>
     bool ok = isL1 or isCorr
     if ok
         int mate = findUnpairedL1(dir)
+        if mate >= 0
+            ZzLeg l1m = array.get(zzLegs, mate)
+            float l1sz = not na(l1m.meas) ? l1m.meas : math.abs(l1m.y2 - l1m.y1)
+            if meas >= l1sz and l1sz > 0
+                removeL1(mate)
+                mate := -1
         string txt = isL1 ? "L1" : "C"
         color c = fade(cssOf(dir), 0)
         label lb = na
         box bx = na
-        if isL1
+        if isL1 and inLookback(a.bar)
             bx := pairBox(a.bar, a.px, b.bar, meas, dir, c)
             if showLegLabels
                 lb := label.new(math.round(math.avg(a.bar, b.bar)), math.avg(a.px, b.px), "L1", xloc.bar_index, yloc.price, c, label.style_label_left, color.white, size.small)
@@ -782,6 +850,13 @@ float sizeNeed = needSize(atrVal)
 bool zzChanged = false
 bool zzL2Started = false
 if showLegs and bar_index > 3
+    int dayT = time("D")
+    if not na(dayT)
+        if array.size(sessOpen) == 0 or array.get(sessOpen, array.size(sessOpen) - 1) != dayT
+            array.push(sessOpen, dayT)
+            while array.size(sessOpen) > lookbackDays
+                array.shift(sessOpen)
+            pruneOldDraws()
     if zzDir == 0
         zzDir := close >= open ? 1 : -1
         zzStartBar := bar_index
@@ -840,6 +915,13 @@ if showLegs and bar_index > 3
                 zzStartPx := zzExtPx
                 zzExtBar := bar_index
                 zzExtPx := high
+    int l1iKill = findUnpairedL1(zzDir)
+    if l1iKill >= 0
+        ZzLeg l1w = array.get(zzLegs, l1iKill)
+        float corrNow = math.abs(zzExtPx - zzStartPx)
+        float l1sz = not na(l1w.meas) ? l1w.meas : math.abs(l1w.y2 - l1w.y1)
+        if l1sz > 0 and corrNow >= l1sz
+            removeL1(l1iKill)
     if zzChanged and array.size(zzLegs) > 0
         ZzLeg justEnded = array.get(zzLegs, array.size(zzLegs) - 1)
         zzL2Started := justEnded.kind == "L2"
@@ -888,7 +970,7 @@ if showLegs and bar_index > 3
             ZzLeg lg2 = array.get(zzLegs, j)
             if lg2.kind == "L2" and not lg2.frozen and lg2.dir == zzDir
                 openL2 := true
-    bool formingL1 = not awaitingCorrEnd() and not openL2 and math.abs(zzExtPx - zzStartPx) >= sizeNeed * 0.35
+    bool formingL1 = not awaitingCorrEnd() and not openL2 and inLookback(zzStartBar) and math.abs(zzExtPx - zzStartPx) >= sizeNeed * 0.35
     color lc = fade(cssOf(zzDir == 0 ? 1 : zzDir), 0)
     if formingL1
         float liveTop = math.max(zzStartPx, zzExtPx)
