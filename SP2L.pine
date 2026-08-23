@@ -9,25 +9,25 @@ indicator("SP2L (Spike – 2Leg – Level)", shorttitle = "SP2L", overlay = true
 grpSpike = "Spike Filter | Movement"
 minSpikeBars = input.int(3, "Minimum Spike Bars", minval = 2, maxval = 50, group = grpSpike, tooltip = "حداقل تعداد کندل برای اسپایک معتبر")
 useMovePower = input.bool(false, "Movement Power", group = grpSpike)
-movePowerLevel = input.float(0.8, "Movement Power Level", minval = 0.1, step = 0.1, group = grpSpike, tooltip = "آستانهٔ range اسپایک نسبت به ATR؛ بالاتر = فقط اسپایک‌های قوی")
+movePowerLevel = input.float(0.6, "Movement Power Level", minval = 0.1, step = 0.1, group = grpSpike, tooltip = "آستانهٔ range اسپایک نسبت به ATR؛ بالاتر = فقط اسپایک‌های قوی")
 atrLen = input.int(14, "ATR Length", minval = 1, group = grpSpike)
 maxSpikeBars = input.int(80, "Max Spike Bars", minval = 3, maxval = 150, group = grpSpike)
 minDirRatio = input.float(0.40, "Min Directional Bar Ratio", minval = 0.3, maxval = 1.0, step = 0.05, group = grpSpike)
 
 grpLeg = "Leg Detection (ZigZag)"
 showLegs = input.bool(true, "Show Legs", group = grpLeg, tooltip = "خطوط زیگ‌زاگ MT4؛ هر خط یک اسپایک SP2L است")
-zzDepth = input.int(12, "Depth", minval = 1, step = 1, group = grpLeg)
-zzDeviation = input.int(5, "Deviation", minval = 1, step = 1, group = grpLeg, tooltip = "حداقل حرکت بین سقف و کف بر حسب پوینت")
-zzBackstep = input.int(2, "Backstep", minval = 2, step = 1, group = grpLeg)
-minLegAtr = input.float(0.5, "Min Leg Size × ATR", minval = 0.0, step = 0.1, group = grpLeg)
+zzDepth = input.int(5, "Depth", minval = 1, step = 1, group = grpLeg)
+zzDeviation = input.int(6, "Deviation", minval = 1, step = 1, group = grpLeg, tooltip = "حداقل حرکت بین سقف و کف بر حسب پوینت")
+zzBackstep = input.int(3, "Backstep", minval = 2, step = 1, group = grpLeg)
+minLegAtr = input.float(1.0, "Min Leg Size × ATR", minval = 0.0, step = 0.1, group = grpLeg)
 maxLegsKeep = input.int(220, "Max Legs On Chart", minval = 4, maxval = 400, group = grpLeg, tooltip = "خطوط زیگ‌زاگ؛ کمی پایین‌تر از 500 تا جا برای باکس و پوزیشن بماند")
-showL2Proj = input.bool(false, "Project L2 = L1", group = grpLeg)
+showL2Proj = input.bool(true, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
 grpPos = "Position Management"
 rrRatio = input.float(2.0, "Risk-Reward Ratio", minval = 0.5, step = 0.1, group = grpPos, tooltip = "TP2 نسبت به ریسک؛ TP1 همیشه 1R است")
 maxWaitBars = input.int(80, "Max Wait Bars After Spike", minval = 5, maxval = 500, group = grpPos)
-showTpRr = input.bool(true, "Show R:R Take-Profits", group = grpPos)
+showTpRr = input.bool(false, "Show R:R Take-Profits", group = grpPos)
 startCap = input.float(1000.0, "Starting Capital $", minval = 1.0, step = 100.0, group = grpPos)
 lotSize = input.float(0.01, "Lot Size", minval = 0.01, step = 0.01, group = grpPos, tooltip = "طلا: 1 لات استاندارد = 100 اونس؛ 0.01 لات یعنی 1 دلار سود به ازای هر 1 دلار حرکت قیمت")
 goldOzPerLot = input.float(100.0, "Gold oz per 1.00 Lot", minval = 1.0, step = 1.0, group = grpPos)
@@ -35,7 +35,7 @@ goldOzPerLot = input.float(100.0, "Gold oz per 1.00 Lot", minval = 1.0, step = 1
 grpDisp = "Display Settings"
 displayMode = input.string("Setup", "Display Mode", options = ["Setup", "Signal"], group = grpDisp)
 onlyLast = input.bool(false, "Only Display the Last Position", group = grpDisp, tooltip = "اگر روشن باشد فقط آخرین ستاپ می‌ماند")
-bullCss = input.color(color.new(#089981, 0), "Bullish", group = grpDisp)
+bullCss = input.color(color.new(#13a886, 0), "Bullish", group = grpDisp)
 bearCss = input.color(color.new(#f23645, 0), "Bearish", group = grpDisp)
 boxTransp = input.int(85, "Spike Box Transparency", minval = 50, maxval = 95, group = grpDisp)
 lvlTransp = input.int(20, "Level Line Transparency", minval = 0, maxval = 80, group = grpDisp)
