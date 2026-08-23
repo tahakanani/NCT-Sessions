@@ -642,6 +642,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
     text_node_size_opt = this.settings.text_node_size
     indexColor = 0
     countNodes = nodesRef.size()
+    bool usePriceOffset = nodeLabelDistPct > 0.0
 
     gapPrefix = ""
     if extraGapLines > 0
@@ -665,7 +666,13 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
 
             shouldDraw = node.isSymmetrySetup ? showDoubleStarNodes : showRegularNodes
             if shouldDraw and canDrawLabel()
-                lbl = label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt))
+                if usePriceOffset
+                    float dist = math.abs(node.highNode) * nodeLabelDistPct / 100.0
+                    // صعود: بالای قله | نزول: پایین کف (highNode در نزول = کف حرکت)
+                    float lblY = swUptrendType ? node.highNode + dist : node.highNode - dist
+                    lbl = label.new(x = index, y = lblY, text = newText, yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt))
+                else
+                    lbl = label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt))
                 trackLabel(lbl)
 
             if i == countNodes - 1
@@ -1042,6 +1049,7 @@ pairTargetMaxCount = input.int(20, 'Number of Last Pairs to Target', minval = 1,
 var GRP3 = "Visual Customization"
 text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
+nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
 c1 = input.color(defval = color.white, inline = "13", group = GRP3)
 c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
 c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
