@@ -385,11 +385,13 @@ redrawSetup(Setup s) =>
                 int x2e = bar_index
                 string ext = s.phase >= 4 ? extend.none : extend.right
                 s.lnEntry := line.new(x1e, s.entry, x2e, s.entry, xloc.bar_index, ext, fade(c, 0), line.style_solid, 2)
+                s.lnSl := line.new(x1e, s.sl, x2e, s.sl, xloc.bar_index, ext, color.new(color.red, 0), line.style_dotted, 2)
                 s.lnL2 := line.new(x1e, s.tpL2, x2e, s.tpL2, xloc.bar_index, ext, fade(c, 0), line.style_solid, 2)
                 if showTpRr
                     s.lnTp1 := line.new(x1e, s.tp1, x2e, s.tp1, xloc.bar_index, ext, color.new(color.orange, 20), line.style_dashed, 1)
                     s.lnTp2 := line.new(x1e, s.tp2, x2e, s.tp2, xloc.bar_index, ext, color.new(color.orange, 0), line.style_dashed, 1)
                 drawLabel(s, x1e, s.entry, "Entry", fade(c, 0), label.style_label_left)
+                drawLabel(s, x1e, s.sl, "SL", color.new(color.red, 0), label.style_label_left)
                 drawLabel(s, x1e, s.tpL2, "L2", fade(c, 0), label.style_label_left)
         true
 
@@ -439,8 +441,8 @@ enterTrade(Setup s, float px) =>
     s.entry := px
     s.entryBar := bar_index
     s.phase := 3
-    s.sl := px
-    float risk = math.max(math.abs(s.entry - s.origin), syminfo.mintick)
+    s.sl := s.origin
+    float risk = math.max(math.abs(s.entry - s.sl), syminfo.mintick)
     if s.dir == 1
         s.tpL2 := s.entry + s.spikeSize * 0.9
         s.tp1 := s.entry + risk
