@@ -53,7 +53,7 @@ showTpRr = input.bool(true, "Show R:R Take-Profits", group = grpPos)
 
 grpDisp = "Display Settings"
 displayMode = input.string("Setup", "Display Mode", options = ["Setup", "Signal"], group = grpDisp)
-onlyLast = input.bool(true, "Only Display the Last Position", group = grpDisp)
+onlyLast = input.bool(true, "Only Display the Last Position", group = grpDisp, tooltip = "خاموش شود تا چند جفت L1/L2 با رنگ‌های جدا روی چارت بمانند")
 bullCss = input.color(color.new(#089981, 0), "Bullish", group = grpDisp)
 bearCss = input.color(color.new(#f23645, 0), "Bearish", group = grpDisp)
 boxTransp = input.int(85, "Spike Box Transparency", minval = 50, maxval = 95, group = grpDisp)
@@ -71,6 +71,8 @@ type Setup
     float origin = na
     float extreme = na
     float spikeSize = na
+    int pairId = 0
+    color pairCss = na
     float corrPx = na
     int corrBar = 0
     bool corrHadBounce = false
@@ -119,6 +121,7 @@ var int zzStartBar = 0
 var float zzStartPx = na
 var int zzExtBar = 0
 var float zzExtPx = na
+var int pairSeq = 0
 
 // phase: 0 empty, 1 forming, 2 wait retest, 3 in trade, 4 closed
 
@@ -294,6 +297,8 @@ resetSetup(Setup s) =>
     s.origin := na
     s.extreme := na
     s.spikeSize := na
+    s.pairId := 0
+    s.pairCss := na
     s.corrPx := na
     s.corrBar := 0
     s.corrHadBounce := false
@@ -372,6 +377,32 @@ zzNewest(int endBar) =>
 zzOldest(int startBar, int endBar) =>
     math.max(bar_index - startBar, zzNewest(endBar))
 
+pairCssOf(int id) =>
+    int i = int(math.abs(id)) % 8
+    color c = #29B6F6
+    if i == 1
+        c := #FFD54F
+    else if i == 2
+        c := #CE93D8
+    else if i == 3
+        c := #26A69A
+    else if i == 4
+        c := #FF8A65
+    else if i == 5
+        c := #5C6BC0
+    else if i == 6
+        c := #EC407A
+    else if i == 7
+        c := #9CCC65
+    c
+
+assignPairCss(Setup s) =>
+    if s.pairId == 0
+        pairSeq += 1
+        s.pairId := pairSeq
+        s.pairCss := pairCssOf(pairSeq)
+    true
+
 fillZzSpike(Setup s, int dir, int startBar, int endBar, float origin, float extreme) =>
     initArrays(s)
     s.dir := dir
@@ -380,6 +411,7 @@ fillZzSpike(Setup s, int dir, int startBar, int endBar, float origin, float extr
     s.origin := origin
     s.extreme := extreme
     s.spikeSize := math.abs(extreme - origin)
+    assignPairCss(s)
     s.corrPx := na
     s.corrBar := 0
     s.corrHadBounce := false
@@ -420,6 +452,9 @@ zzSpikeValid(int dir, int startBar, int endBar, float origin, float extreme, flo
 cssOf(int dir) =>
     dir == 1 ? bullCss : bearCss
 
+pairOf(Setup s) =>
+    na(s.pairCss) ? cssOf(s.dir) : s.pairCss
+
 fade(color c, int transp) =>
     color.new(c, transp)
 
@@ -438,7 +473,7 @@ redrawSetup(Setup s) =>
         bool showSignal = displayMode == "Signal"
         bool inTrade = s.phase == 3 or s.phase == 4
         bool show = showSetup or (showSignal and inTrade)
-        color c = cssOf(s.dir)
+        color c = pairOf(s)
         if show and (showSetup or inTrade)
             if showSetup or s.phase >= 2
                 float top = math.max(s.origin, s.extreme)
