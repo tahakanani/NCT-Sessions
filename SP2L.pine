@@ -306,31 +306,6 @@ onConfirmedSwing(int x1, float y1, int x2, float y2, float atrNow) =>
             spawnL1(dir, x1, x2, y1, y2, meas)
     true
 
-clearLive() =>
-    if not na(zzLiveLbl)
-        label.delete(zzLiveLbl)
-        zzLiveLbl := na
-    if not na(zzLiveBox)
-        box.delete(zzLiveBox)
-        zzLiveBox := na
-    true
-
-bootSwing() =>
-    zzDir := close >= open ? 1 : -1
-    zzStartBar := bar_index
-    zzStartPx := zzDir == 1 ? low : high
-    zzExtBar := bar_index
-    zzExtPx := zzDir == 1 ? high : low
-    true
-
-flipFromExt(int newDir) =>
-    zzDir := newDir
-    zzStartBar := zzExtBar
-    zzStartPx := zzExtPx
-    zzExtBar := bar_index
-    zzExtPx := newDir == 1 ? high : low
-    true
-
 // ================================================================================================
 // Bar engine
 // ================================================================================================
@@ -360,13 +335,21 @@ if showLegs and bar_index > 1
         // Kill a swing that started before the visible window so it cannot stay
         // unconfirmed for days (that left the chart blank).
         if array.size(sessBars) > 0 and zzStartBar < array.get(sessBars, 0)
-            bootSwing()
+            zzDir := close >= open ? 1 : -1
+            zzStartBar := bar_index
+            zzStartPx := zzDir == 1 ? low : high
+            zzExtBar := bar_index
+            zzExtPx := zzDir == 1 ? high : low
     if na(dayT) and array.size(sessBars) == 0
         array.push(sessOpen, time)
         array.push(sessBars, 0)
 
     if zzDir == 0
-        bootSwing()
+        zzDir := close >= open ? 1 : -1
+        zzStartBar := bar_index
+        zzStartPx := zzDir == 1 ? low : high
+        zzExtBar := bar_index
+        zzExtPx := zzDir == 1 ? high : low
     else if zzDir == 1
         if high >= zzExtPx
             zzExtPx := high
@@ -394,9 +377,17 @@ if showLegs and bar_index > 1
                     justL1 := true
                 if added.kind == "L2"
                     justL2 := true
-            flipFromExt(-1)
+            zzDir := -1
+            zzStartBar := zzExtBar
+            zzStartPx := zzExtPx
+            zzExtBar := bar_index
+            zzExtPx := low
         else if abandonTiny
-            flipFromExt(-1)
+            zzDir := -1
+            zzStartBar := zzExtBar
+            zzStartPx := zzExtPx
+            zzExtBar := bar_index
+            zzExtPx := low
     else
         if low <= zzExtPx
             zzExtPx := low
@@ -423,9 +414,17 @@ if showLegs and bar_index > 1
                     justL1 := true
                 if added.kind == "L2"
                     justL2 := true
-            flipFromExt(1)
+            zzDir := 1
+            zzStartBar := zzExtBar
+            zzStartPx := zzExtPx
+            zzExtBar := bar_index
+            zzExtPx := high
         else if abandonTiny
-            flipFromExt(1)
+            zzDir := 1
+            zzStartBar := zzExtBar
+            zzStartPx := zzExtPx
+            zzExtBar := bar_index
+            zzExtPx := high
 
     int l1iKill = findUnpairedL1(zzDir)
     if l1iKill >= 0
@@ -521,7 +520,12 @@ if showLegs and bar_index > 1
                 label.set_text(zzLiveLbl, "L1")
                 label.set_color(zzLiveLbl, lc)
     else
-        clearLive()
+        if not na(zzLiveLbl)
+            label.delete(zzLiveLbl)
+            zzLiveLbl := na
+        if not na(zzLiveBox)
+            box.delete(zzLiveBox)
+            zzLiveBox := na
 
 alertcondition(l1Alert, "SP2L L1", "SP2L first leg")
 alertcondition(entryBuyAlert, "SP2L Buy", "SP2L buy — entry at correction end")
