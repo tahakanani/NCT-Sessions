@@ -438,23 +438,16 @@ archiveDraw(Setup s) =>
     true
 
 enterTrade(Setup s, float px) =>
-    float thresh = useSlThresh ? slThresh : 0.0
     s.entry := px
     s.entryBar := bar_index
     s.phase := 3
+    s.sl := px
+    float risk = math.max(math.abs(s.entry - s.origin), syminfo.mintick)
     if s.dir == 1
-        float rawSl = s.origin - thresh
-        s.sl := rawSl
-        float risk = includeThreshInRR ? s.entry - s.sl : s.entry - s.origin
-        risk := math.max(risk, syminfo.mintick)
         s.tpL2 := s.entry + s.spikeSize * 0.9
         s.tp1 := s.entry + risk
         s.tp2 := s.entry + risk * rrRatio
     else
-        float rawSl = s.origin + thresh
-        s.sl := rawSl
-        float risk = includeThreshInRR ? s.sl - s.entry : s.origin - s.entry
-        risk := math.max(risk, syminfo.mintick)
         s.tpL2 := s.entry - s.spikeSize * 0.9
         s.tp1 := s.entry - risk
         s.tp2 := s.entry - risk * rrRatio
@@ -637,7 +630,8 @@ if bar_index > zzDepth
 initArrays(cur)
 
 if cur.phase == 3
-    bool hitSl = cur.dir == 1 ? low <= cur.sl : high >= cur.sl
+    bool afterEntry = bar_index > cur.entryBar
+    bool hitSl = afterEntry and (cur.dir == 1 ? low <= cur.sl : high >= cur.sl)
     bool hitL2 = cur.dir == 1 ? high >= cur.tpL2 : low <= cur.tpL2
     if hitSl or hitL2
         if hitL2
