@@ -599,10 +599,15 @@ textSizeFromString(string s) =>
 targetLabelBaseX(int gapBars) =>
     int(bar_index + math.max(gapBars / 2, 8))
 
+// Y لیبل کمی بالاتر از قیمت خط تا خط از روی نوشته رد نشود
+labelYAboveLine(float price) =>
+    float off = math.max(math.abs(price) * targetLabelYOffsetPct / 100.0, syminfo.mintick * 3)
+    price + off
+
 styleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
-// lane: 0 صعود، 1 نزول، 2 سایر — خط تا محل لیبل ادامه دارد
+// lane: 0 صعود، 1 نزول، 2 سایر — خط تا محل لیبل ادامه دارد؛ نوشته بالای خط
 drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars, int lane) =>
     if not na(price) and canDrawLine()
         int baseX = targetLabelBaseX(gapBars)
@@ -610,7 +615,7 @@ drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string 
         int endIdx = math.max(bar_index + gapBars, lblX)
         trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(endIdx, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
         if canDrawLabel()
-            trackLabel(label.new(x = lblX, y = price, text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
+            trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = txt, style = label.style_label_down, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
 
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes) =>
     array<Node> nodesRef = array.new<Node>()
@@ -1561,7 +1566,7 @@ drawMapWeeklyLevel(float price, string labelText, color col, int width, string s
         chart.point p2 = chart.point.from_time(lineEndTime, price)
         trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawLabel()
-            trackLabel(label.new(x = lblX, y = price, text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+            trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_down, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
