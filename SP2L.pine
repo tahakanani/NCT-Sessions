@@ -25,6 +25,7 @@ showL2Proj = input.bool(true, "Project L2 = L1", group = grpLeg)
 showEntryMarks = input.bool(false, "Show Entry Triangles", group = grpLeg, tooltip = "مثلث‌های سبز/قرمز ورود HL؛ برای دیدن لگ‌ها خاموش بماند")
 
 grpPos = "Position Management"
+entryMode = input.string("50%", "Entry Retracement of L1", options = ["50%", "70%", "86%"], group = grpPos, tooltip = "ورود روی برگشت به این درصد از اندازه L1")
 rrRatio = input.float(2.0, "Risk-Reward Ratio", minval = 0.5, step = 0.1, group = grpPos, tooltip = "TP2 نسبت به ریسک؛ TP1 همیشه 1R است")
 maxWaitBars = input.int(80, "Max Wait Bars After Spike", minval = 5, maxval = 500, group = grpPos)
 showTpRr = input.bool(false, "Show R:R Take-Profits", group = grpPos)
@@ -355,6 +356,13 @@ pairOf(Setup s) =>
 fade(color c, int transp) =>
     color.new(c, transp)
 
+entryRetrPct() =>
+    entryMode == "70%" ? 0.70 : entryMode == "86%" ? 0.86 : 0.50
+
+retrEntryPx(Setup s) =>
+    float pct = entryRetrPct()
+    s.dir == 1 ? s.extreme - s.spikeSize * pct : s.extreme + s.spikeSize * pct
+
 drawLabel(Setup s, int x, float y, string txt, color c, string style) =>
     label lb = label.new(x, y, txt, xloc.bar_index, yloc.price, c, style, color.white, size.small)
     array.push(s.labels, lb)
@@ -380,6 +388,10 @@ redrawSetup(Setup s) =>
                 int midX = math.round(math.avg(s.startBar, s.endBar))
                 float midY = math.avg(s.origin, s.extreme)
                 drawLabel(s, midX, midY, "L1", fade(c, 0), s.dir == 1 ? label.style_label_up : label.style_label_down)
+            if s.phase == 2
+                float ep = retrEntryPx(s)
+                s.lnEntry := line.new(s.endBar, ep, bar_index, ep, xloc.bar_index, extend.none, fade(c, 40), line.style_dashed, 1)
+                drawLabel(s, bar_index, ep, "Entry " + entryMode, fade(c, 20), label.style_label_left)
             if inTrade
                 int x1e = s.entryBar
                 int x2e = bar_index
@@ -404,6 +416,8 @@ extendOpenDraw(Setup s) =>
         if not na(s.lvlLines) and array.size(s.lvlLines) > 0 and (s.phase == 1 or s.phase == 2)
             for i = 0 to array.size(s.lvlLines) - 1
                 line.set_x2(array.get(s.lvlLines, i), bar_index)
+        if s.phase == 2 and not na(s.lnEntry)
+            line.set_x2(s.lnEntry, bar_index)
         if s.phase == 3
             if not na(s.lnEntry)
                 line.set_x2(s.lnEntry, bar_index)
@@ -692,27 +706,12 @@ if not newComplete and (cur.phase == 0 or cur.phase == 1) and zzDir != 0
     else if cur.phase == 1
         resetSetup(cur)
 
-updateCorrExtreme(cur)
-
-if cur.phase == 2 and not na(cur.corrPx) and bar_index > cur.endBar
+if cur.phase == 2 and bar_index > cur.endBar and not na(cur.spikeSize)
+    float ep = retrEntryPx(cur)
     bool stillValid = cur.dir == 1 ? low >= cur.origin : high <= cur.origin
-    bool finishedOpp = zzJustConfirmed and zzConfDir != cur.dir
-    bool enterNow = false
-    if finishedOpp
-        if cur.corrHadBounce
-            enterNow := true
-        else
-            cur.corrPending := true
-    else if zzJustConfirmed and zzConfDir == cur.dir and cur.corrPending
-        float resumeSize = math.abs(zzConfExt - zzConfOrig)
-        bool largeResume = resumeSize >= atrVal * minLegAtr and resumeSize >= cur.spikeSize * 0.35
-        if largeResume
-            enterNow := true
-        else
-            cur.corrPending := false
-            cur.corrHadBounce := true
-    if enterNow and stillValid
-        enterTrade(cur, cur.corrPx)
+    bool touch = low <= ep and high >= ep
+    if touch and stillValid
+        enterTrade(cur, ep)
         if cur.dir == 1
             entryBuyAlert := true
         else
