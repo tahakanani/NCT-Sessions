@@ -430,17 +430,13 @@ var g_labels = array.new<label>()
 var g_lines  = array.new<line>()
 var g_boxes  = array.new<box>()
 
-// Leave headroom under TradingView hard caps (500)
-MAX_DRAW_LINES   = 480
-MAX_DRAW_LABELS  = 480
-MAX_DRAW_BOXES   = 480
+// Leave headroom under TradingView hard caps (500).
+// تارگت‌های قیمتی اولویت دارند؛ MAP/سشن/تایم فقط از باقی بودجه استفاده می‌کنند (بدون دزدیدن سهم از قیمتی‌ها).
+MAX_DRAW_LINES   = 450
+MAX_DRAW_LABELS  = 450
+MAX_DRAW_BOXES   = 450
 MAX_HIT_LOOKBACK = 2000
 MAX_ROUND_LEVELS = 40
-// سهم رزرو MAP تا نودتارگت‌ها همهٔ سقف را نخورند؛ بعد از رسم MAP بقیه آزاد می‌شود
-MAP_LINE_BUDGET  = 24
-MAP_LABEL_BUDGET = 24
-var bool g_fullLineBudget = false
-var bool g_fullLabelBudget = false
 
 // Hit-check cache: build once per redraw, then O(1) per target
 var array<float> g_hitSufMaxHigh = array.new<float>()
@@ -481,22 +477,13 @@ prepareHitWindow(int hitGraceBars) =>
                 g_hitSufMinLow.push(sufMin.get(i))
 
 canDrawLine() =>
-    int cap = g_fullLineBudget ? MAX_DRAW_LINES : MAX_DRAW_LINES - MAP_LINE_BUDGET
-    g_lines.size() < cap
+    g_lines.size() < MAX_DRAW_LINES
 
 canDrawLabel() =>
-    int cap = g_fullLabelBudget ? MAX_DRAW_LABELS : MAX_DRAW_LABELS - MAP_LABEL_BUDGET
-    g_labels.size() < cap
+    g_labels.size() < MAX_DRAW_LABELS
 
 canDrawBox() =>
     g_boxes.size() < MAX_DRAW_BOXES
-
-// MAP می‌تواند از سهم رزرو استفاده کند
-canDrawMapLine() =>
-    g_lines.size() < MAX_DRAW_LINES
-
-canDrawMapLabel() =>
-    g_labels.size() < MAX_DRAW_LABELS
 
 trackLabel(label lbl) =>
     if canDrawLabel()
@@ -504,20 +491,8 @@ trackLabel(label lbl) =>
     else
         label.delete(lbl)
 
-trackMapLabel(label lbl) =>
-    if canDrawMapLabel()
-        g_labels.push(lbl)
-    else
-        label.delete(lbl)
-
 trackLine(line ln) =>
     if canDrawLine()
-        g_lines.push(ln)
-    else
-        line.delete(ln)
-
-trackMapLine(line ln) =>
-    if canDrawMapLine()
         g_lines.push(ln)
     else
         line.delete(ln)
@@ -1141,8 +1116,6 @@ method countStarlessNode1(series NDS this, bool swUptrendType) =>
 
 if bar_index == last_bar_index
     clearDrawings()
-    g_fullLineBudget := false
-    g_fullLabelBudget := false
     resetLabelStagger()
 
     // یک‌بار کل پنجره hit را آماده کن؛ بعد هر تارگت O(1) چک می‌شود
@@ -1559,7 +1532,7 @@ formatUtcOffsetTz(float hoursOffset) =>
 
 // MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
 var GRP_MAPW = "MAP Weekly Targets"
-enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'سطوح هفتهٔ قبل. سهم جدا از سقف خطوط دارد تا زیر تارگت‌های دیگر نماند. روشن/خاموش کردنش روی بقیه اثر منطقی ندارد مگر نزدیک سقف ۵۰۰ خط TradingView باشی.')
+enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'سطوح هفتهٔ قبل. بعد از تارگت‌های قیمتی رسم می‌شود و هیچ خط قیمتی را برای خودش حذف نمی‌کند. اگر جا کم باشد، اول تایم‌تارگت‌ها کنار می‌روند.')
 mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
 mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
 mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
@@ -1616,7 +1589,7 @@ else if na(mapPwHigh) or na(mapPwLow)
     mapPwLow := mapPwLowRaw
 
 drawMapWeeklyLevel(float price, string labelText, color col, int width, string styleStr, int startTime, int endTime, int labelBarX) =>
-    if not na(price) and not na(startTime) and not na(time) and canDrawMapLine()
+    if not na(price) and not na(startTime) and not na(time) and canDrawLine()
         lnStyle = styleFromString(styleStr)
         int lineEnd = targetLabelMaxX(mapExtendBars)
         int baseX = targetLabelBaseX(mapExtendBars)
@@ -1626,9 +1599,62 @@ drawMapWeeklyLevel(float price, string labelText, color col, int width, string s
         int lineEndTime = time + (endIdx - bar_index) * tfMs
         chart.point p1 = chart.point.from_time(startTime, price)
         chart.point p2 = chart.point.from_time(math.max(nz(endTime, time), lineEndTime), price)
-        trackMapLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
-        if mapShowLabels and canDrawMapLabel()
-            trackMapLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+        trackLine(line.new(p1, p2, color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
+        if mapShowLabels and canDrawLabel()
+            trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+
+drawAllMapWeeklyLevels() =>
+    if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
+        float mapRange = mapPwHigh - mapPwLow
+        if mapRange > 0
+            int mapStartTime = time("W")
+            if na(mapStartTime)
+                mapStartTime := time
+            int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
+            int mapEndTime = time + mapExtendBars * tfMs
+            int mapLabelBarX = bar_index + mapExtendBars
+            float mapMid = (mapPwHigh + mapPwLow) / 2.0
+            float map25 = mapPwLow + mapRange * 0.25
+            float map75 = mapPwLow + mapRange * 0.75
+
+            if mapShowHigh
+                drawMapWeeklyLevel(mapPwHigh, "PW High", mapHighColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+            if mapShowLow
+                drawMapWeeklyLevel(mapPwLow, "PW Low", mapLowColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+            if mapShowMid
+                drawMapWeeklyLevel(mapMid, "50%", mapMidColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+            if mapShow25
+                drawMapWeeklyLevel(map25, "25%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+            if mapShow75
+                drawMapWeeklyLevel(map75, "75%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+
+            if mapShowExtAbove
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+
+            if mapShowExtBelow
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
 
 [open_1m, close_1m] = request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
 
@@ -1863,62 +1889,8 @@ registerSessionTargetEx(float price, color col, string labelText, int lineWidth)
         drawTargetLineLabel(bar_index, price, col, lineWidth, sessionTargetLineStyle, sessionTargetLineTransparency, labelText, targetLabelGapBars, 2)
 
 if bar_index == last_bar_index
-    // MAP اول رسم می‌شود تا سهم رزروشده‌اش قبل از سشن/تایم‌تارگت مصرف شود
-    if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
-        float mapRange = mapPwHigh - mapPwLow
-        if mapRange > 0
-            int mapStartTime = time("W")
-            if na(mapStartTime)
-                mapStartTime := time
-            int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
-            int mapEndTime = time + mapExtendBars * tfMs
-            int mapLabelBarX = bar_index + mapExtendBars
-            float mapMid = (mapPwHigh + mapPwLow) / 2.0
-            float map25 = mapPwLow + mapRange * 0.25
-            float map75 = mapPwLow + mapRange * 0.75
-
-            if mapShowHigh
-                drawMapWeeklyLevel(mapPwHigh, "PW High", mapHighColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-            if mapShowLow
-                drawMapWeeklyLevel(mapPwLow, "PW Low", mapLowColor, mapKeyLineWidth, mapKeyLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-            if mapShowMid
-                drawMapWeeklyLevel(mapMid, "50%", mapMidColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-            if mapShow25
-                drawMapWeeklyLevel(map25, "25%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-            if mapShow75
-                drawMapWeeklyLevel(map75, "75%", mapRetraceColor, mapMidLineWidth, mapMidLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-
-            if mapShowExtAbove
-                if mapShow1125
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow125
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow1375
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow150
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow175
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow200
-                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-
-            if mapShowExtBelow
-                if mapShow1125
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, "1.125x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow125
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, "1.25x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow1375
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, "1.375x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow150
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, "1.5x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow175
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, "1.75x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-                if mapShow200
-                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, "2x", mapExtColor, mapExtLineWidth, mapExtLineStyle, mapStartTime, mapEndTime, mapLabelBarX)
-
-    // بعد از MAP، باقی سقف خطوط برای سشن / Day OC / تایم‌تارگت آزاد است
-    g_fullLineBudget := true
-    g_fullLabelBudget := true
+    // اولویت: تارگت قیمتی (بلوک قبل) → MAP → سشن/Day → تایم‌تارگت (آخر؛ اگر جا کم باشد کنار می‌رود)
+    drawAllMapWeeklyLevels()
 
     if enableSessionTargets
         if show_sesa and sesa_range
@@ -1968,14 +1940,12 @@ if bar_index == last_bar_index
         ocLbl = label.new(x = getStaggerX(boxTop, bar_index + int(targetLabelGapBars / 2), 2, bar_index + targetLabelGapBars), y = labelYAboveLine(boxTop), text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
         trackLabel(ocLbl)
 
-    // تارگت‌های زمانی عمودی — امروز + روزهای قبلی (Display Days)
+    // تارگت‌های زمانی عمودی — آخر صف بودجه (اگر جا کم باشد حذف می‌شوند، نه تارگت قیمتی)
     if enableTimeTargets
-        // تایم‌زون مستقل از سشن‌ها (مگر Same as Sessions)
         string ttTz = timeTargetTzMode == 'Exchange' ? syminfo.timezone : timeTargetTzMode == 'Same as Sessions' ? tz : formatUtcOffsetTz(timeTargetUtcOffset)
         int yToday = year(timenow, ttTz)
         int mToday = month(timenow, ttTz)
         int dToday = dayofmonth(timenow, ttTz)
-        // ظهر امروز؛ عقب‌رفتن با روز کامل تا اثر DST کمتر شود
         int noonToday = timestamp(ttTz, yToday, mToday, dToday, 12, 0, 0)
         ttLnStyle = dayOcStyleFromString(timeTargetStyle)
         color ttCol = color.new(timeTargetColor, timeTargetTransparency)
