@@ -1530,9 +1530,9 @@ dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color
 var GRP_TIMETGT = "Time Targets (Vertical)"
 enableTimeTargets = input.bool(true, 'Show Time Targets', group = GRP_TIMETGT, tooltip = 'خطوط عمودی روی ساعت‌های داده‌شده، بر اساس تایم‌زون انتخابی همین گروه')
 timeTargetTzMode = input.string('Custom UTC', 'Timezone', options = ['Custom UTC', 'Same as Sessions', 'Exchange'], group = GRP_TIMETGT, tooltip = 'Custom UTC = آفست زیر | Same as Sessions = همان تایم‌زون گروه Timezone سشن‌ها | Exchange = تایم‌زون صرافی نماد')
-timeTargetUtcOffset = input.float(0.0, 'UTC Offset (hours)', minval = -12.0, maxval = 14.0, step = 0.25, group = GRP_TIMETGT, tooltip = 'فقط وقتی Timezone = Custom UTC. مثال: 0 = UTC، 3 = UTC+3، 3.5 = UTC+3:30، -5 = UTC-5')
+timeTargetUtcOffset = input.float(3.5, 'UTC Offset (hours)', minval = -12.0, maxval = 14.0, step = 0.25, group = GRP_TIMETGT, tooltip = 'فقط وقتی Timezone = Custom UTC. پیش‌فرض ۳.۵ = UTC+03:30. مثال: 0 = UTC، 3 = UTC+3، 3.5 = UTC+3:30')
 timeTargetDisplayDays = input.int(1, 'Display Days', minval = 1, maxval = 10, group = GRP_TIMETGT, tooltip = 'تعداد روزهای نمایش: ۱ = فقط امروز، ۲ = امروز + دیروز، و همین‌طور بیشتر')
-timeTargetsCsv = input.string('01:30,02:30,03:00,04:00,07:00,08:00,09:00,10:00,12:00,13:00,15:30,16:30,18:00,20:00,21:00,23:00', 'Times (HH:MM, comma-separated)', group = GRP_TIMETGT, tooltip = 'لیست تایم‌ها با کاما در همان تایم‌زون انتخابی؛ برای هر روز در بازهٔ Display Days رسم می‌شود')
+timeTargetsCsv = input.string('03:30,04:30,08:00,09:00,09:30,10:30,14:30,15:00,15:30,16:00,16:30,17:00,17:30,18:00,20:00,21:30,23:00,23:30', 'Times (HH:MM, comma-separated)', group = GRP_TIMETGT, tooltip = 'لیست تایم‌ها با کاما در همان تایم‌زون انتخابی؛ پیش‌فرض برای UTC+03:30')
 timeTargetColor = input.color(color.new(#78909c, 0), 'Line Color', inline = 'tt_col', group = GRP_TIMETGT)
 timeTargetWidth = input.int(1, 'Line Width', minval = 1, maxval = 5, inline = 'tt_col', group = GRP_TIMETGT)
 timeTargetStyle = input.string('Dashed', 'Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'tt_st', group = GRP_TIMETGT)
