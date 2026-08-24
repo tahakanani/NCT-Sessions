@@ -536,8 +536,6 @@ clearDrawings() =>
         line.delete(g_lines.pop())
     while g_boxes.size() > 0
         box.delete(g_boxes.pop())
-    g_fullLineBudget := false
-    g_fullLabelBudget := false
 
 // Fast hit check using prebuilt suffix max/min (same result as old per-target loop)
 shouldDeleteHitTarget(float price, int startIdx, bool isUp, bool deleteHit, int hitGraceBars) =>
@@ -1143,6 +1141,8 @@ method countStarlessNode1(series NDS this, bool swUptrendType) =>
 
 if bar_index == last_bar_index
     clearDrawings()
+    g_fullLineBudget := false
+    g_fullLabelBudget := false
     resetLabelStagger()
 
     // یک‌بار کل پنجره hit را آماده کن؛ بعد هر تارگت O(1) چک می‌شود
