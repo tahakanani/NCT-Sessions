@@ -1509,7 +1509,7 @@ formatUtcOffsetTz(float hoursOffset) =>
 
 // MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
 var GRP_MAPW = "MAP Weekly Targets"
-enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'سطوح High/Low هفتهٔ قبل. خطوط روی حداکثر ~۴۹۰ کندل اخیر چارت رسم می‌شوند (نه کل هفته روی ۱m). ۲۴ اسلات همیشه برای MAP رزرو است؛ روشن/خاموش کردن MAP تعداد تارگت قیمتی را عوض نمی‌کند.')
+enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. اول از همه رسم می‌شود تا با تارگت‌های زیاد یا Heavy script حذف نشود.')
 mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
 mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
 mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
@@ -1559,9 +1559,6 @@ var float mapPwHigh = na
 var float mapPwLow = na
 bool mapRawOk = not na(mapPwHighRaw) and not na(mapPwLowRaw) and mapPwHighRaw > mapPwLowRaw
 if mapRawOk and (barstate.isfirst or ta.change(time("W")) != 0 or na(mapPwHigh) or na(mapPwLow))
-    mapPwHigh := mapPwHighRaw
-    mapPwLow := mapPwLowRaw
-else if mapRawOk and (na(mapPwHigh) or na(mapPwLow) or mapPwHigh != mapPwHighRaw or mapPwLow != mapPwLowRaw) and ta.change(time("W")) != 0
     mapPwHigh := mapPwHighRaw
     mapPwLow := mapPwLowRaw
 
