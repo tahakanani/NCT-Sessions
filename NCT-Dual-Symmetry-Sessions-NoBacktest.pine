@@ -1138,7 +1138,7 @@ method countStarlessNode1(series NDS this, bool swUptrendType) =>
                 cnt += 1
     cnt
 
-if bar_index == last_bar_index and (barstate.isnew or barstate.islastconfirmedhistory or not barstate.isrealtime)
+if bar_index == last_bar_index
     clearDrawings()
     resetLabelStagger()
 
@@ -1934,7 +1934,7 @@ registerSessionTargetEx(float price, color col, string labelText, int lineWidth)
     if not na(price) and canDrawLine() and canDrawLabel()
         drawTargetLineLabel(bar_index, price, col, lineWidth, sessionTargetLineStyle, sessionTargetLineTransparency, labelText, targetLabelGapBars, 2)
 
-if bar_index == last_bar_index and (barstate.isnew or barstate.islastconfirmedhistory or not barstate.isrealtime)
+if bar_index == last_bar_index
     // اولویت: تارگت قیمتی (بلوک قبل) → MAP → سشن/Day → تایم‌تارگت (آخر؛ اگر جا کم باشد کنار می‌رود)
     drawAllMapWeeklyLevels()
 
