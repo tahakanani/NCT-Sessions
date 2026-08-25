@@ -1736,6 +1736,7 @@ if dayCountOpenClose <= 2
 enableFvg = input.bool(true, 'Enable Fair Value Gap', group = 'Fair Value Gap')
 fvgThresholdPer = input.float(0.0, 'Threshold %', minval = 0, maxval = 100, step = 0.1, inline = 'fvg_thr', group = 'Fair Value Gap')
 fvgAutoThreshold = input.bool(false, 'Auto', inline = 'fvg_thr', group = 'Fair Value Gap')
+fvgMaxPerSide = input.int(5, 'Max FVGs per side (Bull / Bear)', minval = 1, maxval = 50, group = 'Fair Value Gap', tooltip = 'حداکثر تعداد گپ صعودی و حداکثر تعداد گپ نزولی که هم‌زمان روی چارت می‌مانند؛ پیش‌فرض ۵ و ۵')
 fvgShowLast = input.int(0, 'Unmitigated Levels', minval = 0, group = 'Fair Value Gap')
 fvgMitigationLevels = input.bool(false, 'Mitigation Levels', group = 'Fair Value Gap')
 fvgTf = input.timeframe('', 'Timeframe', group = 'Fair Value Gap')
@@ -1777,6 +1778,34 @@ var array<int> fvg_born_arr = array.new<int>()
 var array<box> fvg_box_arr = array.new<box>()
 var array<line> fvg_unmitigated = array.new<line>()
 
+// فقط N گپ از هر سمت (صعود/نزول) نگه دار؛ قدیمی‌ترین همان سمت حذف می‌شود
+trimFvgBySide(bool wantBull, int maxKeep) =>
+    int countSide = 0
+    int sz = fvg_bull_arr.size()
+    if sz > 0
+        for i = 0 to sz - 1
+            if fvg_bull_arr.get(i) == wantBull
+                countSide += 1
+    int guard = 0
+    while countSide > maxKeep and guard < 100
+        int rem = -1
+        for i = fvg_bull_arr.size() - 1 to 0
+            if fvg_bull_arr.get(i) == wantBull
+                rem := i
+                break
+        if rem < 0
+            break
+        box oldBx = fvg_box_arr.get(rem)
+        if not na(oldBx)
+            box.delete(oldBx)
+        fvg_box_arr.remove(rem)
+        fvg_max_arr.remove(rem)
+        fvg_min_arr.remove(rem)
+        fvg_bull_arr.remove(rem)
+        fvg_born_arr.remove(rem)
+        countSide -= 1
+        guard += 1
+
 [fvg_bull_c, fvg_bear_c, fvg_mx_c, fvg_mn_c] = fvgDetectRaw()
 bool fvg_on_chart = fvgTf == '' or fvgTf == timeframe.period
 [fvg_bull_htf, fvg_bear_htf, fvg_mx_htf, fvg_mn_htf] = if enableFvg and not fvg_on_chart
@@ -1805,14 +1834,7 @@ if enableFvg and fvg_bull_new and not na(fvg_mx) and not na(fvg_mn) and fvg_mx >
     fvg_born_arr.unshift(bar_index)
     fvg_bull_count += 1
     fvg_last_sig_bar := bar_index
-    while fvg_max_arr.size() > MAX_FVG_OPEN
-        box oldBx = fvg_box_arr.pop()
-        if not na(oldBx)
-            box.delete(oldBx)
-        fvg_max_arr.pop()
-        fvg_min_arr.pop()
-        fvg_bull_arr.pop()
-        fvg_born_arr.pop()
+    trimFvgBySide(true, fvgMaxPerSide)
 else if enableFvg and fvgDynamic
     fvg_max_bull := math.max(math.min(close, fvg_max_bull), fvg_min_bull)
 
@@ -1830,14 +1852,7 @@ if enableFvg and fvg_bear_new and not na(fvg_mx) and not na(fvg_mn) and fvg_mx >
     fvg_born_arr.unshift(bar_index)
     fvg_bear_count += 1
     fvg_last_sig_bar := bar_index
-    while fvg_max_arr.size() > MAX_FVG_OPEN
-        box oldBx = fvg_box_arr.pop()
-        if not na(oldBx)
-            box.delete(oldBx)
-        fvg_max_arr.pop()
-        fvg_min_arr.pop()
-        fvg_bull_arr.pop()
-        fvg_born_arr.pop()
+    trimFvgBySide(false, fvgMaxPerSide)
 else if enableFvg and fvgDynamic
     fvg_min_bear := math.min(math.max(close, fvg_min_bear), fvg_max_bear)
 
