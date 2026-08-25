@@ -1138,54 +1138,7 @@ method countStarlessNode1(series NDS this, bool swUptrendType) =>
                 cnt += 1
     cnt
 
-if bar_index == last_bar_index
-    clearDrawings()
-    resetLabelStagger()
-
-    // یک‌بار کل پنجره hit را آماده کن؛ بعد هر تارگت O(1) چک می‌شود
-    if deleteHitTargets
-        prepareHitWindow(hitGraceBarsInput)
-
-    bool showStarred  = nodeDisplayMode == 'Starred'
-    bool showStarless = nodeDisplayMode == 'Starless'
-
-    if showStarred
-        if cNodeSym.nodesUp.size() > 0
-            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
-        if cNodeSym.nodesDown.size() > 0
-            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
-    if showStarless
-        if cNodeNoSym.nodesUp.size() > 0
-            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct)
-        if cNodeNoSym.nodesDown.size() > 0
-            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct)
-
-    NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
-
-    if enableSingleNode1Targets
-        if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
-        if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
-
-    if enableSingleNode2Targets
-        if showTargetNode1Up
-            cTarget.drawingTargetsNode2(true,  showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
-        if showTargetNode1Down
-            cTarget.drawingTargetsNode2(false, showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
-
-    if enablePairNode12Targets
-        if showTargetNode1Up
-            cTarget.drawingPairTargetsNode12(true,  showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
-        if showTargetNode1Down
-            cTarget.drawingPairTargetsNode12(false, showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
-
-    if enableRoundTargets
-        if roundApplyUp
-            drawRoundNumberTargets(roundBasePrice, true,  targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, true)
-        if roundApplyDown
-            drawRoundNumberTargets(roundBasePrice, false, targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, not roundApplyUp)
-
+// رسم تارگت‌ها به بعد از تعریف MAP منتقل شد تا MAP اول رسم شود
 
 //#endregion
 
@@ -1598,33 +1551,31 @@ line_length = math.round(line_length_factor * 10)
 
 is_new_day = ta.change(time("D")) != 0
 
-// هفتهٔ قبلِ کامل‌شده (مثل MAPWeekly.cs: کندل هفتگی یکی قبل از هفتهٔ جاری)
-// lookahead_on + high[1] = مقدار هفتهٔ بسته‌شده از ابتدای هفتهٔ جدید در دسترس است (بدون نشت آینده)
-// هفتهٔ قبلِ کامل‌شده — فقط وقتی MAP روشن است security صدا زده می‌شود
-[mapPwHighRaw, mapPwLowRaw] = if enableMapWeekly
-    request.security(syminfo.tickerid, "W", [high[1], low[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
-else
-    [na, na]
+// هفتهٔ قبلِ کامل‌شده — همیشه می‌گیریم تا داده na نماند
+[mapPwHighRaw, mapPwLowRaw] = request.security(syminfo.tickerid, "W", [high[1], low[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
 
-// قفل روی شروع هفته؛ فقط وقتی raw معتبر است مقدار را عوض کن تا na قفل نشود
+// قفل روی شروع هفته؛ فقط وقتی raw معتبر است
 var float mapPwHigh = na
 var float mapPwLow = na
 bool mapRawOk = not na(mapPwHighRaw) and not na(mapPwLowRaw) and mapPwHighRaw > mapPwLowRaw
 if mapRawOk and (barstate.isfirst or ta.change(time("W")) != 0 or na(mapPwHigh) or na(mapPwLow))
     mapPwHigh := mapPwHighRaw
     mapPwLow := mapPwLowRaw
+else if mapRawOk and (na(mapPwHigh) or na(mapPwLow) or mapPwHigh != mapPwHighRaw or mapPwLow != mapPwLowRaw) and ta.change(time("W")) != 0
+    mapPwHigh := mapPwHighRaw
+    mapPwLow := mapPwLowRaw
 
-// رسم MAP روی پنجرهٔ امن bar_index (حداکثر ~۴۹۰ کندل عقب) تا روی ۱m خط هفته‌کامل حذف نشود
+// رسم MAP: از ایندکس کندل (حداکثر ~۴۹۰ عقب) تا جلو — کم‌حجم، اولویت اول بعد از clear
 drawMapWeeklyLevel(float price, color col, int width, string styleStr, int startIdx, int endIdx) =>
     if not na(price) and canDrawMapLine()
         lnStyle = styleFromString(styleStr)
-        int sIdx = math.max(0, math.min(startIdx, endIdx))
+        int sIdx = math.max(0, math.min(startIdx, endIdx - 1))
         int eIdx = math.max(sIdx + 1, endIdx)
-        int baseX = targetLabelBaseX(mapExtendBars)
-        int lineEnd = targetLabelMaxX(mapExtendBars)
-        int lblX = mapShowLabels ? getStaggerX(price, baseX, 2, lineEnd) : lineEnd
         trackMapLine(line.new(chart.point.from_index(sIdx, price), chart.point.from_index(eIdx, price), color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawMapLabel()
+            int baseX = targetLabelBaseX(mapExtendBars)
+            int lineEnd = targetLabelMaxX(mapExtendBars)
+            int lblX = getStaggerX(price, baseX, 2, lineEnd)
             trackMapLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 drawAllMapWeeklyLevels() =>
@@ -1634,9 +1585,9 @@ drawAllMapWeeklyLevels() =>
             int tfMs = math.max(timeframe.in_seconds() * 1000, 1000)
             int weekStart = time("W")
             int barsSinceWeek = na(weekStart) ? MAP_MAX_LOOKBACK : int(math.max((time - weekStart) / tfMs, 1))
-            int lookback = math.min(barsSinceWeek, MAP_MAX_LOOKBACK)
+            int lookback = math.min(math.max(barsSinceWeek, 10), MAP_MAX_LOOKBACK)
             int startIdx = math.max(0, bar_index - lookback)
-            int endIdx = bar_index + math.max(mapExtendBars, 1)
+            int endIdx = bar_index + math.max(mapExtendBars, 10)
             float mapMid = (mapPwHigh + mapPwLow) / 2.0
             float map25 = mapPwLow + mapRange * 0.25
             float map75 = mapPwLow + mapRange * 0.75
@@ -1950,8 +1901,54 @@ registerSessionTargetEx(float price, color col, string labelText, int lineWidth)
         drawTargetLineLabel(bar_index, price, col, lineWidth, sessionTargetLineStyle, sessionTargetLineTransparency, labelText, targetLabelGapBars, 2)
 
 if bar_index == last_bar_index
-    // اولویت: تارگت قیمتی (بلوک قبل) → MAP → سشن/Day → تایم‌تارگت (آخر؛ اگر جا کم باشد کنار می‌رود)
+    clearDrawings()
+    resetLabelStagger()
+
+    if deleteHitTargets
+        prepareHitWindow(hitGraceBarsInput)
+
+    // MAP اول — فقط حدود ۱۳ خط؛ قبل از تارگت‌های قیمتی تا با Heavy script حذف نشود
     drawAllMapWeeklyLevels()
+
+    bool showStarred  = nodeDisplayMode == 'Starred'
+    bool showStarless = nodeDisplayMode == 'Starless'
+
+    if showStarred
+        if cNodeSym.nodesUp.size() > 0
+            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
+        if cNodeSym.nodesDown.size() > 0
+            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
+    if showStarless
+        if cNodeNoSym.nodesUp.size() > 0
+            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct)
+        if cNodeNoSym.nodesDown.size() > 0
+            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct)
+
+    NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
+
+    if enableSingleNode1Targets
+        if showTargetNode1Up
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
+        if showTargetNode1Down
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
+
+    if enableSingleNode2Targets
+        if showTargetNode1Up
+            cTarget.drawingTargetsNode2(true,  showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+        if showTargetNode1Down
+            cTarget.drawingTargetsNode2(false, showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+
+    if enablePairNode12Targets
+        if showTargetNode1Up
+            cTarget.drawingPairTargetsNode12(true,  showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+        if showTargetNode1Down
+            cTarget.drawingPairTargetsNode12(false, showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+
+    if enableRoundTargets
+        if roundApplyUp
+            drawRoundNumberTargets(roundBasePrice, true,  targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, true)
+        if roundApplyDown
+            drawRoundNumberTargets(roundBasePrice, false, targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, not roundApplyUp)
 
     if enableSessionTargets
         if show_sesa and sesa_range
