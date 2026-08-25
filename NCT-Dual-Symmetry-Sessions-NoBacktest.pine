@@ -1601,7 +1601,10 @@ is_new_day = ta.change(time("D")) != 0
 // هفتهٔ قبلِ کامل‌شده (مثل MAPWeekly.cs: کندل هفتگی یکی قبل از هفتهٔ جاری)
 // lookahead_on + high[1] = مقدار هفتهٔ بسته‌شده از ابتدای هفتهٔ جدید در دسترس است (بدون نشت آینده)
 // هفتهٔ قبلِ کامل‌شده — فقط وقتی MAP روشن است security صدا زده می‌شود
-[mapPwHighRaw, mapPwLowRaw] = enableMapWeekly ? request.security(syminfo.tickerid, "W", [high[1], low[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on) : [float(na), float(na)]
+[mapPwHighRaw, mapPwLowRaw] = if enableMapWeekly
+    request.security(syminfo.tickerid, "W", [high[1], low[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+else
+    [na, na]
 
 // قفل روی شروع هفته؛ فقط وقتی raw معتبر است مقدار را عوض کن تا na قفل نشود
 var float mapPwHigh = na
@@ -1677,7 +1680,10 @@ drawAllMapWeeklyLevels() =>
                 if mapShow200
                     drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
 
-[open_1m, close_1m] = (showDayOpenLine or showDayCloseLine or showDayOCBox) ? request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off) : [float(na), float(na)]
+[open_1m, close_1m] = if showDayOpenLine or showDayCloseLine or showDayOCBox
+    request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
+else
+    [na, na]
 
 var float open_today_price = na
 var float close_yesterday_price = na
@@ -1773,7 +1779,10 @@ var array<line> fvg_unmitigated = array.new<line>()
 
 [fvg_bull_c, fvg_bear_c, fvg_mx_c, fvg_mn_c] = fvgDetectRaw()
 bool fvg_on_chart = fvgTf == '' or fvgTf == timeframe.period
-[fvg_bull_htf, fvg_bear_htf, fvg_mx_htf, fvg_mn_htf] = (enableFvg and not fvg_on_chart) ? request.security(syminfo.tickerid, fvgTf, fvgDetectRaw(), lookahead = barmerge.lookahead_off) : [false, false, float(na), float(na)]
+[fvg_bull_htf, fvg_bear_htf, fvg_mx_htf, fvg_mn_htf] = if enableFvg and not fvg_on_chart
+    request.security(syminfo.tickerid, fvgTf, fvgDetectRaw(), lookahead = barmerge.lookahead_off)
+else
+    [false, false, na, na]
 bool fvg_bull = fvg_on_chart ? fvg_bull_c : fvg_bull_htf
 bool fvg_bear = fvg_on_chart ? fvg_bear_c : fvg_bear_htf
 float fvg_mx = fvg_on_chart ? fvg_mx_c : fvg_mx_htf
