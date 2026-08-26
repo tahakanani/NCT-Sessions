@@ -655,6 +655,26 @@ drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string 
         if canDrawLabel()
             trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
 
+// Node 2 ناقص: قله/کف نود ۲ هنوز به Min 1 نود ۱ نرسیده (مثل cTrader IsIncompleteNode2)
+isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
+    bool result = false
+    if i > 0 and i < nodesRef.size()
+        Node n2 = nodesRef.get(i)
+        Node n1 = nodesRef.get(i - 1)
+        if n2.numberNode == 2 and n1.numberNode == 1
+            float moveSizeLog = math.abs(math.log(n1.highNode) - math.log(n1.lowPreNode))
+            float minPrice = swUptrendType ? math.exp(math.log(n1.lowCorrection) + moveSizeLog) : math.exp(math.log(n1.lowCorrection) - moveSizeLog)
+            if not na(minPrice)
+                result := swUptrendType ? n2.highNode < minPrice : n2.highNode > minPrice
+    result
+
+drawIncompleteNode2Underline(int barIdx, float y, bool swUptrendType, color lineCol) =>
+    if canDrawLine() and not na(y)
+        float tick = syminfo.mintick > 0 ? syminfo.mintick : math.abs(y) * 1e-4
+        float offset = tick * 3.0
+        float lineY = swUptrendType ? y + offset : y - offset
+        trackLine(line.new(chart.point.from_index(barIdx - 1, lineY), chart.point.from_index(barIdx + 1, lineY), color = lineCol, width = 2))
+
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct) =>
     array<Node> nodesRef = array.new<Node>()
     var locText = yloc.belowbar
@@ -691,13 +711,15 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
 
             shouldDraw = node.isSymmetrySetup ? showDoubleStarNodes : showRegularNodes
             if shouldDraw and canDrawLabel()
+                float dist = usePriceOffset ? math.abs(node.highNode) * labelDistPct / 100.0 : 0.0
+                // صعود: بالای قله | نزول: پایین کف (highNode در نزول = کف حرکت)
+                float lblY = swUptrendType ? node.highNode + dist : node.highNode - dist
                 if usePriceOffset
-                    float dist = math.abs(node.highNode) * labelDistPct / 100.0
-                    // صعود: بالای قله | نزول: پایین کف (highNode در نزول = کف حرکت)
-                    float lblY = swUptrendType ? node.highNode + dist : node.highNode - dist
                     trackLabel(label.new(x = index, y = lblY, text = newText, yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
                 else
                     trackLabel(label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
+                if isIncompleteNode2(nodesRef, i, swUptrendType)
+                    drawIncompleteNode2Underline(index, lblY, swUptrendType, textColor)
 
             if i == countNodes - 1
                 break
@@ -753,7 +775,7 @@ method drawingLineNodes(series NDS this) =>
 // ================================================================================================
 // تارگت‌های نود ۱ (Double + Double0.86 + Min + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     int lane = swUptrendType ? 0 : 1
@@ -813,6 +835,12 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
+                        // وقتی نود ۲ بعدی ناقص است (هنوز به Min 1 نرسیده)، Min×نسبت را هم بکش
+                        if hasNode2 and isIncompleteNode2(nodesRef, i + 1, swUptrendType)
+                            float targetMin085Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * min085Ratio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * min085Ratio)
+                            bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                            if not shouldDelete085
+                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min " + str.tostring(min085Ratio, "#.##"), gapBars, lane)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
@@ -1036,6 +1064,7 @@ double15Ratio             = input.float(1.5, '1.5DOUBLE1 Ratio', minval = 0.01, 
 showTargetDouble086Input  = input.bool(true, 'Show Target Double 0.86 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
 double086Ratio            = input.float(0.86, 'Start→Double Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۶')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
+min085Ratio               = input.float(0.85, 'Min Ratio when Node 2 Incomplete', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'وقتی نود ۲ هنوز به Min 1 نرسیده، علاوه بر Min 1 این نسبت از همان حرکت Min هم رسم می‌شود؛ پیش‌فرض ۰.۸۵')
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
@@ -1925,9 +1954,9 @@ if bar_index == last_bar_index
 
     if enableSingleNode1Targets
         if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio)
         if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio)
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio)
 
     if enableSingleNode2Targets
         if showTargetNode1Up
