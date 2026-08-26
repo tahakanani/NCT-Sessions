@@ -776,7 +776,7 @@ method drawingLineNodes(series NDS this) =>
             trackLine(line.new(secondPoint, thirdPoint ,color = lineColor ,width = lineWidth ))
 
 // ================================================================================================
-// تارگت‌های نود ۱ (Double + Double0.86 + Min + Correction)
+// تارگت‌های نود ۱ (Double + 0.85DOUBLE1 + Min + Correction)
 // ================================================================================================
 method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
