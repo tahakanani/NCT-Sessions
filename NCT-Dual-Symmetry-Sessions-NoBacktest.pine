@@ -1356,6 +1356,7 @@ set_line(session, y1, y2, session_css)=>
         line.set_xy2(tl, nBar, y2)
 
 // === تغییر ۱: get_range — نمایش فقط N سشن اخیر ===
+// extendMidToLast: برای آسیا (Tokyo) خط Mid و همچنین High/Low تا بار جاری ادامه می‌یابند
 get_range(session, session_name, session_css, show_midline, midline_length, displayDays, extendMidToLast)=>
     var t = 0 
     var max = high
@@ -1363,12 +1364,16 @@ get_range(session, session_name, session_css, show_midline, midline_length, disp
     var box bx = na
     var label lbl = na 
     var line mid_line = na
+    var line high_line = na
+    var line low_line = na
     var int start_bar = na
     var int end_bar = na
     
     var array<box>   boxHistory = array.new<box>()
     var array<label> lblHistory = array.new<label>()
     var array<line>  midHistory = array.new<line>()
+    var array<line>  highHistory = array.new<line>()
+    var array<line>  lowHistory = array.new<line>()
 
     if session > session[1]
         t := time
@@ -1380,7 +1385,7 @@ get_range(session, session_name, session_css, show_midline, midline_length, disp
         
         bx := box.new(nBar, max, nBar, min
           , bgcolor = color.new(session_css, bg_transp)
-          , border_color = show_outline ? border_color_transparent : na
+          , border_color = show_outline and not extendMidToLast ? border_color_transparent : na
           , border_width = outline_width
           , border_style = outline_style
           )
@@ -1396,6 +1401,14 @@ get_range(session, session_name, session_css, show_midline, midline_length, disp
                  width = midline_width
              )
             midHistory.push(mid_line)
+
+        // آسیا: خط سقف/کف جدا مثل Mid تا انتهای سشن و بعد از آن ادامه یابد
+        if extendMidToLast
+            hl_color = color.new(session_css, outline_transp)
+            high_line := line.new(start_bar, max, nBar, max, color = hl_color, style = outline_style, width = outline_width)
+            low_line := line.new(start_bar, min, nBar, min, color = hl_color, style = outline_style, width = outline_width)
+            highHistory.push(high_line)
+            lowHistory.push(low_line)
 
         if show_txt
             lbl := label.new(t, max, session_name
@@ -1415,6 +1428,12 @@ get_range(session, session_name, session_css, show_midline, midline_length, disp
         while midHistory.size() > displayDays
             oldMid = midHistory.shift()
             line.delete(oldMid)
+        while highHistory.size() > displayDays
+            oldHi = highHistory.shift()
+            line.delete(oldHi)
+        while lowHistory.size() > displayDays
+            oldLo = lowHistory.shift()
+            line.delete(oldLo)
 
     if session != 0 and session == session[1]
         max := math.max(high, max)
@@ -1428,12 +1447,28 @@ get_range(session, session_name, session_css, show_midline, midline_length, disp
         if show_midline and not na(mid_line) and not na(start_bar)
             line.set_xy1(mid_line, start_bar, (max + min) / 2)
             line.set_xy2(mid_line, end_bar + midline_length, (max + min) / 2)
+
+        if extendMidToLast and not na(start_bar)
+            int hlEnd = end_bar + midline_length
+            if not na(high_line)
+                line.set_xy1(high_line, start_bar, max)
+                line.set_xy2(high_line, hlEnd, max)
+            if not na(low_line)
+                line.set_xy1(low_line, start_bar, min)
+                line.set_xy2(low_line, hlEnd, min)
     
         if show_txt and not na(lbl)
             label.set_xy(lbl, int(math.avg(t, time)), max)
     
-    if extendMidToLast and show_midline and not na(mid_line) and not na(start_bar) and session == 0
-        line.set_xy2(mid_line, nBar, (max + min) / 2)
+    if extendMidToLast and session == 0 and not na(start_bar)
+        if show_midline and not na(mid_line)
+            line.set_xy2(mid_line, nBar, (max + min) / 2)
+        if not na(high_line)
+            line.set_xy1(high_line, start_bar, max)
+            line.set_xy2(high_line, nBar, max)
+        if not na(low_line)
+            line.set_xy1(low_line, start_bar, min)
+            line.set_xy2(low_line, nBar, min)
     
     [session != 0 ? na : max, session != 0 ? na : min, max, min]
 //-----------------------------------------------------------------------------}
