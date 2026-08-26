@@ -848,19 +848,21 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         if not shouldDelete15
                             drawTargetLineLabel(node.indexNode, targetDouble15Price, lineColor, double15Width, double15Style, lineTransparency, trendPrefix + "1.5DOUBLE1", gapBars, lane)
 
+                    float proxMinPrice = na
+                    float proxDbl086Price = na
+
                     if showDouble086 and not hasNode2
                         float startNode1 = node.lowPreNode
                         float doubleEnd = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
                         targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
+                        proxDbl086Price := targetDouble086Price
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete086
                             drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.85DOUBLE1", gapBars, lane)
 
-                    float drawnMinPrice = na
-                    float drawnDbl086Price = na
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
-                        drawnMinPrice := targetMinPrice
+                        proxMinPrice := targetMinPrice
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
@@ -871,16 +873,10 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             if not shouldDelete085
                                 drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
 
-                    // نقطه سبز وقتی Min 1 و 0.85DOUBLE1 هر دو فعال و نزدیک‌اند
-                    if showMin and showDouble086 and not hasNode2
-                        float startNode1b = node.lowPreNode
-                        float doubleEndB = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
-                        drawnDbl086Price := math.exp(math.log(startNode1b) + double086Ratio * (math.log(doubleEndB) - math.log(startNode1b)))
-                        if na(drawnMinPrice)
-                            drawnMinPrice := swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
-                        if pricesWithinTolPct(drawnMinPrice, drawnDbl086Price, minDblProxTolPct)
-                            float proxY = (drawnMinPrice + drawnDbl086Price) / 2.0
-                            drawMinDoubleProximityMarker(node.indexNode, proxY, proxMarkerSize)
+                    // نقطه سبز وقتی Min 1 و 0.85DOUBLE1 نزدیک‌اند (هر دو برای همین نود ۱ بدون نود ۲)
+                    if pricesWithinTolPct(proxMinPrice, proxDbl086Price, minDblProxTolPct)
+                        float proxY = (proxMinPrice + proxDbl086Price) / 2.0
+                        drawMinDoubleProximityMarker(node.indexNode, proxY, proxMarkerSize)
 
                     // نود ۱ بیس‌شده: اصلاح ≥ basedRetrace؛ تارگت basedMinExt×Min1 تا قبل از کامل شدن نود ۲
                     if showBasedMin13 and isBasedNode1(node, basedRetraceRatio) and node2NotComplete
@@ -1115,6 +1111,8 @@ min085Ratio               = input.float(0.85, '0.85MIN1 Ratio (incomplete Node 2
 showTargetBasedMin13Input = input.bool(true, 'Show 1.3MIN1 (Based Node 1)', group = GRP6, tooltip = 'فقط برای نود ۱ بیس‌شده (اصلاح ≥ Based Retrace). تا قبل از کامل شدن نود ۲ می‌ماند')
 basedRetraceRatio         = input.float(0.85, 'Based Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نود ۱ بیس می‌شود اگر اصلاح لگاریتمی‌اش به این نسبت از حرکت خودش برسد؛ پیش‌فرض ۰.۸۵')
 basedMinExtRatio          = input.float(1.3, 'Based Min Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.3MIN1 روی نود ۱ بیس‌شده؛ پیش‌فرض ۱.۳')
+minDblProximityTolPct     = input.float(0.15, 'Min1 ↔ 0.85DOUBLE1 Proximity Tolerance (%)', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'اگر فاصلهٔ نسبی Min 1 و 0.85DOUBLE1 کمتر/مساوی این درصد باشد، نقطه سبز در محل تارگت گذاشته می‌شود')
+minDblProximityMarkerSize = input.string('Tiny', 'Proximity Green Dot Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP6, tooltip = 'سایز نقطه سبز نزدیکی Min 1 و 0.85DOUBLE1')
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
@@ -1834,9 +1832,9 @@ if bar_index == last_bar_index
 
     if enableSingleNode1Targets
         if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio)
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, minDblProximityMarkerSize)
         if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio)
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, minDblProximityMarkerSize)
 
     if enableSingleNode2Targets
         if showTargetNode1Up
