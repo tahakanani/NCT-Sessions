@@ -1603,9 +1603,10 @@ line_length = math.round(line_length_factor * 10)
 
 is_new_day = ta.change(time("D")) != 0
 
-// هفتهٔ قبلِ کامل‌شده از خود سری Weekly (نه وابستگی به time("W") روی چارت رنج)
-// روی Range/Renko: time("W") و timeframe.in_seconds() ناپایدار/na هستند
-[mapPwHighRaw, mapPwLowRaw, mapPrevWeekTime] = request.security(syminfo.tickerid, "W", [high[1], low[1], time[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+// هفتهٔ قبل از کندل استاندارد — روی Range/Renko نباید از tickerid چارت استفاده شود
+// چون tickerid نوع چارت را داخل خودش دارد و Weekly اشتباه می‌سازد
+mapStdTicker = ticker.standard(syminfo.tickerid)
+[mapPwHighRaw, mapPwLowRaw, mapPrevWeekTime] = request.security(mapStdTicker, "W", [high[1], low[1], time[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
 
 // قفل با شناسهٔ هفته از خود security — روی رنج دقیق‌تر از ta.change(time("W")) چارت
 var float mapPwHigh = na
