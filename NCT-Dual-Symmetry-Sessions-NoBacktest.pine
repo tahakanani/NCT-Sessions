@@ -1036,7 +1036,7 @@ showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star
 
 var GRP5 = "Node Targets — Master Switches"
 enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + Double0.86 + Min + Correction)', group = GRP5)
-enableSingleNode2Targets = input.bool(true, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
+enableSingleNode2Targets = input.bool(false, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
 showTargetNode1Down = input.bool(true, 'Apply to Down Trend', inline = "trend1", group = GRP5)
@@ -1055,7 +1055,7 @@ roundApplyDown          = input.bool(true, 'Apply Round Numbers to Down Trend', 
 roundDeleteHit          = false
 roundHitGraceBars       = 0
 roundLineWidth          = input.int(1, 'Round Number Line Width', minval = 1, maxval = 4, group = GRP10)
-roundLineStyle          = input.string('Solid', 'Round Number Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP10)
+roundLineStyle          = input.string('Dotted', 'Round Number Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP10)
 roundLineTransparency   = input.int(60, 'Round Number Line Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP10)
 roundLineColor          = input.color(color.new(color.gray, 30), 'Round Number Line Color', group = GRP10)
 roundMinVisiblePrice    = input.float(3000.0, 'Round Min Visible Price (0=auto)', minval = 0.0, group = GRP10)
@@ -1074,18 +1074,18 @@ targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1,
 targetDouble086Width  = input.int(1, 'Target Double 0.86 Line Width', minval = 1, maxval = 4, group = GRP6)
 targetMinWidth        = input.int(1, 'Target Min Line Width', minval = 1, maxval = 4, group = GRP6)
 targetCorrectionWidth = input.int(1, 'Target Correction Line Width', minval = 1, maxval = 4, group = GRP6)
-targetDoubleStyle     = input.string('Solid', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetDouble15Style   = input.string('Solid', 'Target 1.5DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetDouble086Style  = input.string('Solid', 'Target Double 0.86 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetMinStyle        = input.string('Solid', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetCorrectionStyle = input.string('Solid', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetNode1MaxCount = input.int(8, 'Number of Last Nodes to Target', minval = 1, maxval = 100, group = GRP6)
+targetDoubleStyle     = input.string('Dotted', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble15Style   = input.string('Dotted', 'Target 1.5DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble086Style  = input.string('Dotted', 'Target Double 0.86 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetMinStyle        = input.string('Dotted', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetCorrectionStyle = input.string('Dotted', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetNode1MaxCount = input.int(30, 'Number of Last Nodes to Target', minval = 1, maxval = 100, group = GRP6)
 
 var GRP6B = "Node 2 Target (Single)"
-showTargetNode2Input = input.bool(true, 'Show Target Node 2 (move from correction end)', group = GRP6B, tooltip = 'اندازه حرکت نود ۲ را بگیر؛ از انتهای اصلاح نود ۲ به اندازه همان حرکت در جهت نود ۲ برو')
+showTargetNode2Input = input.bool(false, 'Show Target Node 2 (move from correction end)', group = GRP6B, tooltip = 'اندازه حرکت نود ۲ را بگیر؛ از انتهای اصلاح نود ۲ به اندازه همان حرکت در جهت نود ۲ برو')
 targetNode2Width = input.int(1, 'Target Node 2 Line Width', minval = 1, maxval = 4, group = GRP6B)
-targetNode2Style = input.string('Solid', 'Target Node 2 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6B)
-targetNode2MaxCount = input.int(8, 'Number of Last Node 2 to Target', minval = 1, maxval = 100, group = GRP6B)
+targetNode2Style = input.string('Dotted', 'Target Node 2 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6B)
+targetNode2MaxCount = input.int(30, 'Number of Last Node 2 to Target', minval = 1, maxval = 100, group = GRP6B)
 
 var GRP7 = "Node 1+2 Pair Targets (Min / Max / Double / Correction)"
 showPairMinInput    = input.bool(true, 'Show Target Min (from Node1 correction end)', group = GRP7)
@@ -1096,17 +1096,17 @@ pairMinWidth    = input.int(1, 'Pair Target Min Line Width', minval = 1, maxval 
 pairMaxWidth    = input.int(1, 'Pair Target Max Line Width', minval = 1, maxval = 4, group = GRP7)
 pairDoubleWidth = input.int(1, 'Pair Target Double Line Width', minval = 1, maxval = 4, group = GRP7)
 pairCorrectionWidth = input.int(1, 'Pair Target Correction Line Width', minval = 1, maxval = 4, group = GRP7)
-pairMinStyle    = input.string('Solid', 'Pair Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
-pairMaxStyle    = input.string('Solid', 'Pair Target Max Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
-pairDoubleStyle = input.string('Solid', 'Pair Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
-pairCorrectionStyle = input.string('Solid', 'Pair Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
-pairTargetMaxCount = input.int(8, 'Number of Last Pairs to Target', minval = 1, maxval = 100, group = GRP7)
+pairMinStyle    = input.string('Dotted', 'Pair Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairMaxStyle    = input.string('Dotted', 'Pair Target Max Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairDoubleStyle = input.string('Dotted', 'Pair Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairCorrectionStyle = input.string('Dotted', 'Pair Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairTargetMaxCount = input.int(30, 'Number of Last Pairs to Target', minval = 1, maxval = 100, group = GRP7)
 
 var GRP3 = "Visual Customization"
 text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
-incompleteNode2MarkerSize = input.string('Extra Tiny', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP3, tooltip = 'سایز دایره/نقطه قرمز روی محل تشکیل نود ۲ ناقص. Extra Tiny و Micro از Tiny لیبل کوچک‌ترند')
+incompleteNode2MarkerSize = input.string('Tiny', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP3, tooltip = 'سایز دایره/نقطه قرمز روی محل تشکیل نود ۲ ناقص. Extra Tiny و Micro از Tiny لیبل کوچک‌ترند')
 c1 = input.color(defval = color.white, inline = "13", group = GRP3)
 c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
 c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
@@ -1264,7 +1264,7 @@ applySessionMid  = input.bool(true, 'Include Session Midline', inline = 'sestgt1
 sessionHighLineWidth = input.int(1, 'Session High Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
 sessionLowLineWidth  = input.int(1, 'Session Low Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
 sessionMidLineWidth  = input.int(1, 'Session Mid Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
-sessionTargetLineStyle  = input.string('Solid', 'Session Target Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP_SESTGT)
+sessionTargetLineStyle  = input.string('Dotted', 'Session Target Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP_SESTGT)
 sessionTargetLineTransparency = input.int(60, 'Session Target Line Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP_SESTGT)
 
 //-----------------------------------------------------------------------------}
@@ -1524,8 +1524,8 @@ timeTargetDisplayDays = input.int(1, 'Display Days', minval = 1, maxval = 10, gr
 timeTargetsCsv = input.string('03:30,04:30,08:00,09:00,09:30,10:30,14:30,15:00,15:30,16:00,16:30,17:00,17:30,18:00,20:00,21:30,23:00,23:30', 'Times (HH:MM, comma-separated)', group = GRP_TIMETGT, tooltip = 'لیست تایم‌ها با کاما در همان تایم‌زون انتخابی؛ پیش‌فرض برای UTC+03:30')
 timeTargetColor = input.color(color.new(#78909c, 0), 'Line Color', inline = 'tt_col', group = GRP_TIMETGT)
 timeTargetWidth = input.int(1, 'Line Width', minval = 1, maxval = 5, inline = 'tt_col', group = GRP_TIMETGT)
-timeTargetStyle = input.string('Solid', 'Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'tt_st', group = GRP_TIMETGT)
-timeTargetTransparency = input.int(40, 'Line Transparency', minval = 0, maxval = 100, inline = 'tt_st', group = GRP_TIMETGT)
+timeTargetStyle = input.string('Dotted', 'Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'tt_st', group = GRP_TIMETGT)
+timeTargetTransparency = input.int(50, 'Line Transparency', minval = 0, maxval = 100, inline = 'tt_st', group = GRP_TIMETGT)
 showTimeTargetLabels = input.bool(true, 'Show Time Labels', group = GRP_TIMETGT)
 timeTargetLabelSize = input.string('Tiny', 'Label Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_TIMETGT)
 
@@ -1542,7 +1542,7 @@ formatUtcOffsetTz(float hoursOffset) =>
 
 // MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
 var GRP_MAPW = "MAP Weekly Targets"
-enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. اول از همه رسم می‌شود تا با تارگت‌های زیاد یا Heavy script حذف نشود.')
+enableMapWeekly = input.bool(false, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. اول از همه رسم می‌شود تا با تارگت‌های زیاد یا Heavy script حذف نشود.')
 mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
 mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
 mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
