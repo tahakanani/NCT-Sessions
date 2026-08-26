@@ -97,25 +97,25 @@ namespace cAlgo.Indicators
         [Parameter("1.5 Double Ratio", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
         public double Double15Ratio { get; set; }
 
-        [Parameter("Show Double 0.86 (Single)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show 0.85DOUBLE1 (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble086 { get; set; }
 
-        [Parameter("Start→Double Ratio", DefaultValue = 0.86, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
+        [Parameter("Start→Double Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Double086Ratio { get; set; }
 
-        [Parameter("Double 0.86 Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Node Targets")]
+        [Parameter("0.85DOUBLE1 Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Node Targets")]
         public int Double086LineWidth { get; set; }
 
-        [Parameter("Double 0.86 Line Style", DefaultValue = "Dotted", Group = "Node Targets")]
+        [Parameter("0.85DOUBLE1 Line Style", DefaultValue = "Dotted", Group = "Node Targets")]
         public string Double086LineStyleName { get; set; }
 
         [Parameter("Show Min (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin { get; set; }
 
-        [Parameter("Show Min 0.85 (Incomplete 2)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show 0.85MIN1 (Incomplete 2)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin085 { get; set; }
 
-        [Parameter("Min 0.85 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
+        [Parameter("0.85MIN1 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Min085Ratio { get; set; }
 
         [Parameter("Show Correction (Single)", DefaultValue = true, Group = "Node Targets")]
@@ -1790,6 +1790,14 @@ namespace cAlgo.Indicators
                 : n2.HighNode > minPrice;
         }
 
+        private bool FollowingNode2IsComplete(List<Node> nodes, int node1Index, bool swUptrendType)
+        {
+            int i2 = node1Index + 1;
+            if (i2 >= nodes.Count || nodes[i2].NumberNode != 2)
+                return false;
+            return !IsIncompleteNode2(nodes, i2, swUptrendType);
+        }
+
         private void DrawIncompleteNode2Underline(int barIdx, double y, bool swUptrendType, Color color)
         {
             DateTime t0 = TimeAtIndex(barIdx - 1);
@@ -1924,7 +1932,7 @@ namespace cAlgo.Indicators
 
                 if (ShowDouble086)
                 {
-                    // Keep D 0.86 until this node 1 gets its own following node 2.
+                    // Keep 0.85DOUBLE1 until this node 1 gets its own following node 2.
                     bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
                     if (!hasRelatedNode2)
                     {
@@ -1935,7 +1943,7 @@ namespace cAlgo.Indicators
                         {
                             DrawTargetLine(startTime, endTime, price, lineColor, Double086LineWidth,
                                 ParseLineStyle(Double086LineStyleName),
-                                trendPrefix + "D " + Double086Ratio.ToString("0.##"), labelColor);
+                                trendPrefix + Double086Ratio.ToString("0.##") + "DOUBLE1", labelColor);
                         }
                     }
                 }
@@ -1951,8 +1959,11 @@ namespace cAlgo.Indicators
                     }
                 }
 
-                // Incomplete node 2: also draw 0.85 of this node 1 Min.
-                if (ShowMin085 && i + 1 < nodes.Count && IsIncompleteNode2(nodes, i + 1, swUptrendType))
+                // 0.85MIN1 only while node 2 is incomplete; drop it when that setup's node 2 completes.
+                if (ShowMin085
+                    && !FollowingNode2IsComplete(nodes, i, swUptrendType)
+                    && i + 1 < nodes.Count
+                    && IsIncompleteNode2(nodes, i + 1, swUptrendType))
                 {
                     double minPrice = TargetProject(node.LowCorrection, moveSize, swUptrendType);
                     double price = AlongPath(node.LowCorrection, minPrice, Min085Ratio);
@@ -1961,7 +1972,7 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth,
                             ParseLineStyle(Double086LineStyleName),
-                            trendPrefix + "Min " + Min085Ratio.ToString("0.##"), labelColor);
+                            trendPrefix + Min085Ratio.ToString("0.##") + "MIN1", labelColor);
                     }
                 }
 
