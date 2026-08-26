@@ -776,9 +776,15 @@ method drawingLineNodes(series NDS this) =>
             trackLine(line.new(secondPoint, thirdPoint ,color = lineColor ,width = lineWidth ))
 
 // ================================================================================================
-// تارگت‌های نود ۱ (Double + 0.85DOUBLE1 + Min + Correction)
+// نود ۱ بیس‌شده: اصلاح ≥ نسبت مشخصی از حرکت خودش (لگاریتمی)
+isBasedNode1(Node node, float basedRetraceRatio) =>
+    float moveLog = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
+    float corrLog = math.abs(math.log(node.highNode) - math.log(node.lowCorrection))
+    moveLog > 0 and corrLog >= moveLog * basedRetraceRatio
+
+// تارگت‌های نود ۱ (Double + 0.85DOUBLE1 + Min + 1.3MIN1 + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     int lane = swUptrendType ? 0 : 1
@@ -818,6 +824,9 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
 
                     // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5DOUBLE1 و 0.85DOUBLE1 لازم نیستند
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
+                    bool node2Incomplete = hasNode2 and isIncompleteNode2(nodesRef, i + 1, swUptrendType)
+                    // نود ۲ هنوز کامل نشده: یا تشکیل نشده، یا ناقص است
+                    bool node2NotComplete = not hasNode2 or node2Incomplete
 
                     if showDouble15 and not hasNode2
                         targetDouble15Price = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog * double15Ratio) : math.exp(math.log(node.highNode) - moveSizeLog * double15Ratio)
@@ -839,11 +848,18 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
                         // فقط وقتی نود ۲ بعدی ناقص است؛ با کامل شدن نود ۲ دیگر رسم نمی‌شود
-                        if hasNode2 and isIncompleteNode2(nodesRef, i + 1, swUptrendType)
+                        if node2Incomplete
                             float targetMin085Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * min085Ratio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * min085Ratio)
                             bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                             if not shouldDelete085
                                 drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
+
+                    // نود ۱ بیس‌شده: اصلاح ≥ basedRetrace؛ تارگت basedMinExt×Min1 تا قبل از کامل شدن نود ۲
+                    if showBasedMin13 and isBasedNode1(node, basedRetraceRatio) and node2NotComplete
+                        float targetBasedMin13 = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * basedMinExtRatio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * basedMinExtRatio)
+                        bool shouldDeleteBased = shouldDeleteHitTarget(targetBasedMin13, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDeleteBased
+                            drawTargetLineLabel(node.indexNode, targetBasedMin13, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "1.3MIN1", gapBars, lane)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
@@ -1035,7 +1051,7 @@ showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', g
 showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
 
 var GRP5 = "Node Targets — Master Switches"
-enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + 0.85DOUBLE1 + Min + Correction)', group = GRP5)
+enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + 0.85DOUBLE1 + Min + 1.3MIN1 + Correction)', group = GRP5)
 enableSingleNode2Targets = input.bool(false, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
@@ -1068,6 +1084,9 @@ showTargetDouble086Input  = input.bool(true, 'Show Target 0.85DOUBLE1 (start→D
 double086Ratio            = input.float(0.85, '0.85DOUBLE1 Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۵')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
 min085Ratio               = input.float(0.85, '0.85MIN1 Ratio (incomplete Node 2)', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'فقط وقتی نود ۲ ناقص است کنار Min 1 رسم می‌شود؛ با کامل شدن نود ۲ حذف می‌شود')
+showTargetBasedMin13Input = input.bool(true, 'Show 1.3MIN1 (Based Node 1)', group = GRP6, tooltip = 'فقط برای نود ۱ بیس‌شده (اصلاح ≥ Based Retrace). تا قبل از کامل شدن نود ۲ می‌ماند')
+basedRetraceRatio         = input.float(0.85, 'Based Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نود ۱ بیس می‌شود اگر اصلاح لگاریتمی‌اش به این نسبت از حرکت خودش برسد؛ پیش‌فرض ۰.۸۵')
+basedMinExtRatio          = input.float(1.3, 'Based Min Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.3MIN1 روی نود ۱ بیس‌شده؛ پیش‌فرض ۱.۳')
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
