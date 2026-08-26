@@ -106,6 +106,12 @@ namespace cAlgo.Indicators
         [Parameter("Show Min (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin { get; set; }
 
+        [Parameter("Show Min 0.85 (Incomplete 2)", DefaultValue = true, Group = "Node Targets")]
+        public bool ShowMin085 { get; set; }
+
+        [Parameter("Min 0.85 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
+        public double Min085Ratio { get; set; }
+
         [Parameter("Show Correction (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowCorrection { get; set; }
 
@@ -1567,6 +1573,9 @@ namespace cAlgo.Indicators
               .Append(Double15Ratio.ToString("R")).Append('|')
               .Append(ShowDouble086).Append('|')
               .Append(Double086Ratio.ToString("R")).Append('|')
+              .Append(ShowMin).Append('|')
+              .Append(ShowMin085).Append('|')
+              .Append(Min085Ratio.ToString("R")).Append('|')
               .Append(EnableSingleNode1Targets).Append('|')
               .Append(EnablePairNode12Targets).Append('|')
               .Append(TargetMaxCount).Append('|')
@@ -1916,6 +1925,20 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth, styleMin,
                             trendPrefix + "Min 1", labelColor);
+                    }
+                }
+
+                // Incomplete node 2: also draw 0.85 of this node 1 Min.
+                if (ShowMin085 && i + 1 < nodes.Count && IsIncompleteNode2(nodes, i + 1, swUptrendType))
+                {
+                    double minPrice = TargetProject(node.LowCorrection, moveSize, swUptrendType);
+                    double price = AlongPath(node.LowCorrection, minPrice, Min085Ratio);
+
+                    if (!ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
+                    {
+                        DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth,
+                            ParseLineStyle(Double086LineStyleName),
+                            trendPrefix + "Min " + Min085Ratio.ToString("0.##"), labelColor);
                     }
                 }
 
