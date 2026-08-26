@@ -118,6 +118,15 @@ namespace cAlgo.Indicators
         [Parameter("0.85MIN1 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Min085Ratio { get; set; }
 
+        [Parameter("Show 1.3MIN1 (Based Node 1)", DefaultValue = true, Group = "Node Targets")]
+        public bool ShowMin13Based { get; set; }
+
+        [Parameter("Based Retrace Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 1.0, Group = "Node Targets")]
+        public double BasedRetraceRatio { get; set; }
+
+        [Parameter("Based Min Extension", DefaultValue = 1.3, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
+        public double BasedMin13Ratio { get; set; }
+
         [Parameter("Show Correction (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowCorrection { get; set; }
 
@@ -1582,6 +1591,9 @@ namespace cAlgo.Indicators
               .Append(ShowMin).Append('|')
               .Append(ShowMin085).Append('|')
               .Append(Min085Ratio.ToString("R")).Append('|')
+              .Append(ShowMin13Based).Append('|')
+              .Append(BasedRetraceRatio.ToString("R")).Append('|')
+              .Append(BasedMin13Ratio.ToString("R")).Append('|')
               .Append(EnableSingleNode1Targets).Append('|')
               .Append(EnablePairNode12Targets).Append('|')
               .Append(TargetMaxCount).Append('|')
@@ -1798,6 +1810,15 @@ namespace cAlgo.Indicators
             return !IsIncompleteNode2(nodes, i2, swUptrendType);
         }
 
+        private bool IsBasedNode1(Node node)
+        {
+            double impulse = TargetAbsMove(node.LowPreNode, node.HighNode);
+            if (impulse <= 1e-12)
+                return false;
+            double retrace = TargetAbsMove(node.HighNode, node.LowCorrection);
+            return retrace >= impulse * BasedRetraceRatio;
+        }
+
         private void DrawIncompleteNode2Underline(int barIdx, double y, bool swUptrendType, Color color)
         {
             DateTime t0 = TimeAtIndex(barIdx - 1);
@@ -1973,6 +1994,20 @@ namespace cAlgo.Indicators
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth,
                             ParseLineStyle(Double086LineStyleName),
                             trendPrefix + Min085Ratio.ToString("0.##") + "MIN1", labelColor);
+                    }
+                }
+
+                // Based node 1 (retrace ≥ 0.85): 1.3 of Min 1 while forming node 2.
+                if (ShowMin13Based
+                    && IsBasedNode1(node)
+                    && !FollowingNode2IsComplete(nodes, i, swUptrendType))
+                {
+                    double price = TargetProject(node.LowCorrection, moveSize * BasedMin13Ratio, swUptrendType);
+
+                    if (!ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
+                    {
+                        DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth, styleMin,
+                            trendPrefix + BasedMin13Ratio.ToString("0.##") + "MIN1", labelColor);
                     }
                 }
 
