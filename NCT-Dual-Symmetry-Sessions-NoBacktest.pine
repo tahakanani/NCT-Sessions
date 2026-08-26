@@ -1694,7 +1694,7 @@ drawAllMapWeeklyLevels() =>
                     drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
 
 [open_1m, close_1m] = if showDayOpenLine or showDayCloseLine or showDayOCBox
-    request.security(syminfo.tickerid, "1", [open, close], lookahead=barmerge.lookahead_off)
+    request.security(ticker.standard(syminfo.tickerid), "1", [open, close], lookahead=barmerge.lookahead_off)
 else
     [na, na]
 
