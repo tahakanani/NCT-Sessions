@@ -1107,7 +1107,7 @@ var GRP3 = "Visual Customization"
 text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
-incompleteNode2MarkerSize = input.string('Small', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP3, tooltip = 'سایز دایره قرمز روی محل تشکیل نود ۲ ناقص (منطقه خطر)')
+incompleteNode2MarkerSize = input.string('Extra Tiny', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP3, tooltip = 'سایز دایره/نقطه قرمز روی محل تشکیل نود ۲ ناقص. Extra Tiny و Micro از Tiny لیبل کوچک‌ترند')
 c1 = input.color(defval = color.white, inline = "13", group = GRP3)
 c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
 c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
