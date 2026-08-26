@@ -44,6 +44,12 @@ namespace cAlgo.Indicators
         [Parameter("Target Font Size", DefaultValue = 10, MinValue = 1, MaxValue = 72, Group = "Visual Customization")]
         public int TargetLabelFontSize { get; set; }
 
+        [Parameter("Incomplete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
+        public bool ShowIncomplete2Circle { get; set; }
+
+        [Parameter("Incomplete 2 Circle Size", DefaultValue = 16, MinValue = 6, MaxValue = 72, Group = "Visual Customization")]
+        public int Incomplete2CircleSize { get; set; }
+
         [Parameter("Color 1", DefaultValue = "#FFE566", Group = "Visual Customization")]
         public string Color1Name { get; set; }
 
@@ -1581,6 +1587,8 @@ namespace cAlgo.Indicators
               .Append(TargetMaxCount).Append('|')
               .Append(PairMaxCount).Append('|')
               .Append(TargetLabelFontSize).Append('|')
+              .Append(ShowIncomplete2Circle).Append('|')
+              .Append(Incomplete2CircleSize).Append('|')
               .Append(TextNodeSize).Append('|')
               .Append(TargetGapBars).Append('|')
               .Append(DeleteHitTargets).Append('|')
@@ -1739,7 +1747,10 @@ namespace cAlgo.Indicators
                     text.HorizontalAlignment = HorizontalAlignment.Center;
 
                     if (IsIncompleteNode2(nodes, i, swUptrendType))
+                    {
                         DrawIncompleteNode2Underline(barIdx, y, swUptrendType, textColor);
+                        DrawIncompleteNode2Circle(barIdx, y);
+                    }
 
                     if (node.IsSymmetrySetup)
                     {
@@ -1792,6 +1803,18 @@ namespace cAlgo.Indicators
 
             Chart.DrawTrendLine(NextName(swUptrendType ? "UpInc2" : "DnInc2"),
                 t0, lineY, t1, lineY, color, 2);
+        }
+
+        private void DrawIncompleteNode2Circle(int barIdx, double y)
+        {
+            if (!ShowIncomplete2Circle)
+                return;
+
+            int size = Math.Max(6, Math.Min(Incomplete2CircleSize, 72));
+            var dot = Chart.DrawText(NextName("Inc2Dot"), "●", Bars.OpenTimes[barIdx], y, Color.Red);
+            dot.FontSize = size;
+            dot.VerticalAlignment = VerticalAlignment.Center;
+            dot.HorizontalAlignment = HorizontalAlignment.Center;
         }
 
         private void DrawingLineNodes()
