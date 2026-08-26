@@ -678,6 +678,20 @@ drawIncompleteNode2DangerMarker(int barIdx, float price, string sizeStr) =>
         else
             trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = textSizeFromString(sizeStr)))
 
+// نزدیکی دو قیمت بر حسب درصد
+pricesWithinTolPct(float a, float b, float tolPct) =>
+    not na(a) and not na(b) and math.abs(a) > 0 and (math.abs(a - b) / math.abs(a)) * 100.0 <= tolPct
+
+// نقطه سبز وقتی Min 1 و 0.85DOUBLE1 نزدیک‌اند
+drawMinDoubleProximityMarker(int barIdx, float price, string sizeStr) =>
+    if canDrawLabel() and not na(price)
+        if sizeStr == "Micro"
+            trackLabel(label.new(x = barIdx, y = price, text = "•", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.lime, size = size.tiny))
+        else if sizeStr == "Extra Tiny"
+            trackLabel(label.new(x = barIdx, y = price, text = "●", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.lime, size = size.tiny))
+        else
+            trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.lime, textcolor = color.lime, size = textSizeFromString(sizeStr)))
+
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, string incomplete2MarkerSize) =>
     array<Node> nodesRef = array.new<Node>()
     var locText = yloc.belowbar
@@ -784,7 +798,7 @@ isBasedNode1(Node node, float basedRetraceRatio) =>
 
 // تارگت‌های نود ۱ (Double + 0.85DOUBLE1 + Min + 1.3MIN1 + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio, float minDblProxTolPct, string proxMarkerSize) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     int lane = swUptrendType ? 0 : 1
@@ -842,8 +856,11 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         if not shouldDelete086
                             drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.85DOUBLE1", gapBars, lane)
 
+                    float drawnMinPrice = na
+                    float drawnDbl086Price = na
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
+                        drawnMinPrice := targetMinPrice
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
@@ -853,6 +870,17 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                             if not shouldDelete085
                                 drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
+
+                    // نقطه سبز وقتی Min 1 و 0.85DOUBLE1 هر دو فعال و نزدیک‌اند
+                    if showMin and showDouble086 and not hasNode2
+                        float startNode1b = node.lowPreNode
+                        float doubleEndB = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
+                        drawnDbl086Price := math.exp(math.log(startNode1b) + double086Ratio * (math.log(doubleEndB) - math.log(startNode1b)))
+                        if na(drawnMinPrice)
+                            drawnMinPrice := swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
+                        if pricesWithinTolPct(drawnMinPrice, drawnDbl086Price, minDblProxTolPct)
+                            float proxY = (drawnMinPrice + drawnDbl086Price) / 2.0
+                            drawMinDoubleProximityMarker(node.indexNode, proxY, proxMarkerSize)
 
                     // نود ۱ بیس‌شده: اصلاح ≥ basedRetrace؛ تارگت basedMinExt×Min1 تا قبل از کامل شدن نود ۲
                     if showBasedMin13 and isBasedNode1(node, basedRetraceRatio) and node2NotComplete
