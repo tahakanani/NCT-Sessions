@@ -669,9 +669,15 @@ isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
     result
 
 // دایره قرمز توپر روی محل تشکیل نود ۲ ناقص (منطقه خطر)
+// Tiny و بالاتر: style_circle | Extra Tiny / Micro: نقطه یونیکد (کوچک‌تر از حد Tiny لیبل)
 drawIncompleteNode2DangerMarker(int barIdx, float price, string sizeStr) =>
     if canDrawLabel() and not na(price)
-        trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = textSizeFromString(sizeStr)))
+        if sizeStr == "Micro"
+            trackLabel(label.new(x = barIdx, y = price, text = "•", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.red, size = size.tiny))
+        else if sizeStr == "Extra Tiny"
+            trackLabel(label.new(x = barIdx, y = price, text = "●", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.red, size = size.tiny))
+        else
+            trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = textSizeFromString(sizeStr)))
 
 method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, string incomplete2MarkerSize) =>
     array<Node> nodesRef = array.new<Node>()
