@@ -816,7 +816,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetDoublePrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 1", gapBars, lane)
 
-                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5 و 0.86 لازم نیستند
+                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5DOUBLE1 و 0.85DOUBLE1 لازم نیستند
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
 
                     if showDouble15 and not hasNode2
@@ -831,19 +831,19 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete086
-                            drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "D " + str.tostring(double086Ratio, "#.##"), gapBars, lane)
+                            drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.85DOUBLE1", gapBars, lane)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
-                        // وقتی نود ۲ بعدی ناقص است (هنوز به Min 1 نرسیده)، Min×نسبت را هم بکش
+                        // فقط وقتی نود ۲ بعدی ناقص است؛ با کامل شدن نود ۲ دیگر رسم نمی‌شود
                         if hasNode2 and isIncompleteNode2(nodesRef, i + 1, swUptrendType)
                             float targetMin085Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * min085Ratio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * min085Ratio)
                             bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                             if not shouldDelete085
-                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min " + str.tostring(min085Ratio, "#.##"), gapBars, lane)
+                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
@@ -1035,7 +1035,7 @@ showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', g
 showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
 
 var GRP5 = "Node Targets — Master Switches"
-enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + Double0.86 + Min + Correction)', group = GRP5)
+enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + 0.85DOUBLE1 + Min + Correction)', group = GRP5)
 enableSingleNode2Targets = input.bool(false, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
 enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
 showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
@@ -1064,19 +1064,19 @@ var GRP6 = "Node 1 Targets (Single)"
 showTargetDoubleInput     = input.bool(true, 'Show Target Double (100% from node peak)', group = GRP6)
 showTargetDouble15Input   = input.bool(true, 'Show Target 1.5DOUBLE1 (150% from node peak)', group = GRP6, tooltip = 'همان Double نود ۱ با نسبت ۱.۵ از قله؛ وقتی نود ۲ تشکیل شود خودکار حذف می‌شود')
 double15Ratio             = input.float(1.5, '1.5DOUBLE1 Ratio', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب حرکت از قله نود ۱؛ پیش‌فرض ۱.۵ (= ۱۵۰٪)')
-showTargetDouble086Input  = input.bool(true, 'Show Target Double 0.86 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
-double086Ratio            = input.float(0.86, 'Start→Double Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۶')
+showTargetDouble086Input  = input.bool(true, 'Show Target 0.85DOUBLE1 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double با نسبت ۰.۸۵؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
+double086Ratio            = input.float(0.85, '0.85DOUBLE1 Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۵')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
-min085Ratio               = input.float(0.85, 'Min Ratio when Node 2 Incomplete', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'وقتی نود ۲ هنوز به Min 1 نرسیده، علاوه بر Min 1 این نسبت از همان حرکت Min هم رسم می‌شود؛ پیش‌فرض ۰.۸۵')
+min085Ratio               = input.float(0.85, '0.85MIN1 Ratio (incomplete Node 2)', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'فقط وقتی نود ۲ ناقص است کنار Min 1 رسم می‌شود؛ با کامل شدن نود ۲ حذف می‌شود')
 showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
-targetDouble086Width  = input.int(1, 'Target Double 0.86 Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDouble086Width  = input.int(1, 'Target 0.85DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
 targetMinWidth        = input.int(1, 'Target Min Line Width', minval = 1, maxval = 4, group = GRP6)
 targetCorrectionWidth = input.int(1, 'Target Correction Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDoubleStyle     = input.string('Dotted', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetDouble15Style   = input.string('Dotted', 'Target 1.5DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
-targetDouble086Style  = input.string('Dotted', 'Target Double 0.86 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble086Style  = input.string('Dotted', 'Target 0.85DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetMinStyle        = input.string('Dotted', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetCorrectionStyle = input.string('Dotted', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
 targetNode1MaxCount = input.int(30, 'Number of Last Nodes to Target', minval = 1, maxval = 100, group = GRP6)
