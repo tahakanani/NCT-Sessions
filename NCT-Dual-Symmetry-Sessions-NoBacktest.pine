@@ -669,11 +669,11 @@ isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
     result
 
 // دایره قرمز توپر روی محل تشکیل نود ۲ ناقص (منطقه خطر)
-drawIncompleteNode2DangerMarker(int barIdx, float price) =>
+drawIncompleteNode2DangerMarker(int barIdx, float price, string sizeStr) =>
     if canDrawLabel() and not na(price)
-        trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = size.small))
+        trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = textSizeFromString(sizeStr)))
 
-method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct) =>
+method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, string incomplete2MarkerSize) =>
     array<Node> nodesRef = array.new<Node>()
     var locText = yloc.belowbar
     if swUptrendType
@@ -717,7 +717,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
                 else
                     trackLabel(label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
             if isIncompleteNode2(nodesRef, i, swUptrendType)
-                drawIncompleteNode2DangerMarker(index, node.highNode)
+                drawIncompleteNode2DangerMarker(index, node.highNode, incomplete2MarkerSize)
 
             if i == countNodes - 1
                 break
@@ -1101,6 +1101,7 @@ var GRP3 = "Visual Customization"
 text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
+incompleteNode2MarkerSize = input.string('Small', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP3, tooltip = 'سایز دایره قرمز روی محل تشکیل نود ۲ ناقص (منطقه خطر)')
 c1 = input.color(defval = color.white, inline = "13", group = GRP3)
 c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
 c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
@@ -1939,14 +1940,14 @@ if bar_index == last_bar_index
 
     if showStarred
         if cNodeSym.nodesUp.size() > 0
-            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
+            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2MarkerSize)
         if cNodeSym.nodesDown.size() > 0
-            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct)
+            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2MarkerSize)
     if showStarless
         if cNodeNoSym.nodesUp.size() > 0
-            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct)
+            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct, incompleteNode2MarkerSize)
         if cNodeNoSym.nodesDown.size() > 0
-            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct)
+            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct, incompleteNode2MarkerSize)
 
     NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
 
