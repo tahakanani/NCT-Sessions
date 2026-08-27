@@ -1917,8 +1917,6 @@ if bar_index == last_bar_index
         boxBot = math.min(open_today_price, close_yesterday_price)
         ocBox = box.new(left = bar_index, top = boxTop, right = bar_index + targetLabelGapBars, bottom = boxBot, bgcolor = dayOCBoxBgColor, border_color = color.new(color.white, 70), border_width = 1, border_style = line.style_solid)
         trackBox(ocBox)
-        ocLbl = label.new(x = getStaggerX(boxTop, bar_index + int(targetLabelGapBars / 2), 2, bar_index + targetLabelGapBars), y = labelYAboveLine(boxTop), text = "OC Panel", style = label.style_label_left, color = color.new(color.black, 100), textcolor = color.new(color.white, 0), size = size.tiny)
-        trackLabel(ocLbl)
 
     // تارگت‌های زمانی عمودی — آخر صف بودجه (اگر جا کم باشد حذف می‌شوند، نه تارگت قیمتی)
     if enableTimeTargets
