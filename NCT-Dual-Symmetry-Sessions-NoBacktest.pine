@@ -693,7 +693,7 @@ drawIncompleteNode2DangerMarker(int barIdx, float price, float radiusPct, int ra
                 int x = barIdx + int(math.round(radiusBars * math.cos(ang)))
                 float y = price + rPrice * math.sin(ang)
                 pts.push(chart.point.from_index(math.max(x, 0), y))
-            trackPolyline(polyline.new(pts, curved = true, line_color = color.red, fill_color = color.new(color.red, 35), filled = true, force_overlay = true))
+            trackPolyline(polyline.new(pts, curved = true, closed = true, line_color = color.red, fill_color = color.new(color.red, 35), force_overlay = true))
 
 // نزدیکی دو قیمت بر حسب درصد
 pricesWithinTolPct(float a, float b, float tolPct) =>
