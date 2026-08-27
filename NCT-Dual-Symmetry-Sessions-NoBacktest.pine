@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 //@version=6
-indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+MAP", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, dynamic_requests = true)
+indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+MAP", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, max_polylines_count = 100, dynamic_requests = true)
 
 // ================================================================================================
 // بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها)
@@ -429,18 +429,21 @@ method CalcNode_DownTrend(series NDS this) =>
 var g_labels = array.new<label>()
 var g_lines  = array.new<line>()
 var g_boxes  = array.new<box>()
+var g_polylines = array.new<polyline>()
 
 // Leave headroom under TradingView hard caps (500).
 // تارگت قیمتی همیشه از MAX-رزرو استفاده می‌کند (چه MAP روشن/خاموش) تا toggle تعدادشان را عوض نکند.
 MAX_DRAW_LINES   = 450
 MAX_DRAW_LABELS  = 450
 MAX_DRAW_BOXES   = 450
+MAX_DRAW_POLYLINES = 80
 MAX_HIT_LOOKBACK = 400
 MAX_ROUND_LEVELS = 40
 MAP_LINE_BUDGET  = 24
 MAP_LABEL_BUDGET = 24
 MAP_MAX_LOOKBACK = 490
 STAGGER_SCAN_CAP = 48
+INCOMPLETE2_CIRCLE_SEGMENTS = 24
 
 // Hit-check cache: build once per redraw, then O(1) per target
 var array<float> g_hitSufMaxHigh = array.new<float>()
@@ -489,6 +492,9 @@ canDrawLabel() =>
 canDrawBox() =>
     g_boxes.size() < MAX_DRAW_BOXES
 
+canDrawPolyline() =>
+    g_polylines.size() < MAX_DRAW_POLYLINES
+
 canDrawMapLine() =>
     g_lines.size() < MAX_DRAW_LINES
 
@@ -525,6 +531,12 @@ trackBox(box b) =>
     else
         box.delete(b)
 
+trackPolyline(polyline p) =>
+    if canDrawPolyline()
+        g_polylines.push(p)
+    else
+        polyline.delete(p)
+
 
 clearDrawings() =>
     while g_labels.size() > 0
@@ -533,6 +545,8 @@ clearDrawings() =>
         line.delete(g_lines.pop())
     while g_boxes.size() > 0
         box.delete(g_boxes.pop())
+    while g_polylines.size() > 0
+        polyline.delete(g_polylines.pop())
 
 // Fast hit check using prebuilt suffix max/min (same result as old per-target loop)
 shouldDeleteHitTarget(float price, int startIdx, bool isUp, bool deleteHit, int hitGraceBars) =>
@@ -667,16 +681,19 @@ isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
                 result := swUptrendType ? n2.highNode < minPrice : n2.highNode > minPrice
     result
 
-// دایره قرمز توپر روی محل تشکیل نود ۲ ناقص (منطقه خطر)
-// Tiny و بالاتر: style_circle | Extra Tiny / Micro: نقطه یونیکد (کوچک‌تر از حد Tiny لیبل)
-drawIncompleteNode2DangerMarker(int barIdx, float price, string sizeStr) =>
-    if canDrawLabel() and not na(price)
-        if sizeStr == "Micro"
-            trackLabel(label.new(x = barIdx, y = price, text = "•", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.red, size = size.tiny))
-        else if sizeStr == "Extra Tiny"
-            trackLabel(label.new(x = barIdx, y = price, text = "●", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.red, size = size.tiny))
-        else
-            trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.red, textcolor = color.red, size = textSizeFromString(sizeStr)))
+// دایره قرمز توپر روی محل تشکیل نود ۲ ناقص — شعاع قیمتی (%) و شعاع افقی (bars)
+drawIncompleteNode2DangerMarker(int barIdx, float price, float radiusPct, int radiusBars) =>
+    if canDrawPolyline() and not na(price) and not na(barIdx) and radiusPct > 0 and radiusBars > 0
+        float rPrice = math.abs(price) * radiusPct / 100.0
+        if rPrice > 0
+            array<chart.point> pts = array.new<chart.point>()
+            int segs = INCOMPLETE2_CIRCLE_SEGMENTS
+            for i = 0 to segs
+                float ang = i * 2.0 * math.pi / segs
+                int x = barIdx + int(math.round(radiusBars * math.cos(ang)))
+                float y = price + rPrice * math.sin(ang)
+                pts.push(chart.point.from_index(math.max(x, 0), y))
+            trackPolyline(polyline.new(pts, curved = true, line_color = color.red, fill_color = color.new(color.red, 35), filled = true, force_overlay = true))
 
 // نزدیکی دو قیمت بر حسب درصد
 pricesWithinTolPct(float a, float b, float tolPct) =>
@@ -692,7 +709,7 @@ drawMinDoubleProximityMarker(int barIdx, float price, string sizeStr) =>
         else
             trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.lime, textcolor = color.lime, size = textSizeFromString(sizeStr)))
 
-method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, string incomplete2MarkerSize) =>
+method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, float incomplete2RadiusPct, int incomplete2RadiusBars) =>
     array<Node> nodesRef = array.new<Node>()
     var locText = yloc.belowbar
     if swUptrendType
@@ -736,7 +753,7 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
                 else
                     trackLabel(label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
             if isIncompleteNode2(nodesRef, i, swUptrendType)
-                drawIncompleteNode2DangerMarker(index, node.highNode, incomplete2MarkerSize)
+                drawIncompleteNode2DangerMarker(index, node.highNode, incomplete2RadiusPct, incomplete2RadiusBars)
 
             if i == countNodes - 1
                 break
@@ -1151,7 +1168,8 @@ var GRP3 = "Visual Customization"
 text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
-incompleteNode2MarkerSize = input.string('Tiny', 'Incomplete Node 2 Danger Circle Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP3, tooltip = 'سایز دایره/نقطه قرمز روی محل تشکیل نود ۲ ناقص. Extra Tiny و Micro از Tiny لیبل کوچک‌ترند')
+incompleteNode2RadiusPct = input.float(0.08, 'Incomplete Node 2 Circle Radius (%)', minval = 0.001, maxval = 5.0, step = 0.001, group = GRP3, tooltip = 'شعاع عمودی دایره قرمز نسبت به قیمت محل تشکیل نود ۲ ناقص')
+incompleteNode2RadiusBars = input.int(3, 'Incomplete Node 2 Circle Radius (Bars)', minval = 1, maxval = 50, group = GRP3, tooltip = 'شعاع افقی دایره قرمز بر حسب تعداد کندل')
 c1 = input.color(defval = color.white, inline = "13", group = GRP3)
 c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
 c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
@@ -1819,14 +1837,14 @@ if bar_index == last_bar_index
 
     if showStarred
         if cNodeSym.nodesUp.size() > 0
-            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2MarkerSize)
+            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
         if cNodeSym.nodesDown.size() > 0
-            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2MarkerSize)
+            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
     if showStarless
         if cNodeNoSym.nodesUp.size() > 0
-            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct, incompleteNode2MarkerSize)
+            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
         if cNodeNoSym.nodesDown.size() > 0
-            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct, incompleteNode2MarkerSize)
+            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
 
     NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
 
