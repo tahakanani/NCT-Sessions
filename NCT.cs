@@ -1699,9 +1699,104 @@ namespace cAlgo.Indicators
 
         private DateTime TargetLabelTime(DateTime startTime, DateTime endTime)
         {
-            // Keep target text in the middle of the line.
             long ticks = startTime.Ticks + (endTime.Ticks - startTime.Ticks) / 2;
             return new DateTime(ticks, startTime.Kind);
+        }
+
+        private static DateTime LerpTime(DateTime a, DateTime b, double t)
+        {
+            if (t <= 0)
+                return a;
+            if (t >= 1)
+                return b;
+            long ticks = a.Ticks + (long)((b.Ticks - a.Ticks) * t);
+            return new DateTime(ticks, a.Kind);
+        }
+
+        private double LabelNewness(DateTime formedAt)
+        {
+            if (Bars == null || Bars.Count < 2)
+                return 1.0;
+
+            int last = Bars.Count - 1;
+            int first = Math.Max(0, last - Math.Max(StartPoint, 50));
+            DateTime t0 = Bars.OpenTimes[first];
+            DateTime t1 = Bars.OpenTimes[last];
+            if (formedAt <= t0)
+                return 0.0;
+            if (formedAt >= t1)
+                return 1.0;
+
+            double span = (t1 - t0).TotalSeconds;
+            if (span < 1e-9)
+                return 1.0;
+            return (formedAt - t0).TotalSeconds / span;
+        }
+
+        private bool LabelSlotTaken(DateTime slotTime, double price)
+        {
+            TimeSpan bar = AverageBarDuration();
+            int occupyBars = Math.Max(6, 8 + TargetFontSizeValue() / 2);
+            long occupyTicks = bar.Ticks * occupyBars;
+
+            for (int i = 0; i < _stagLabelPrices.Count; i++)
+            {
+                if (!PricesCloseForLabel(_stagLabelPrices[i], price))
+                    continue;
+                if (Math.Abs((_stagLabelTimes[i] - slotTime).Ticks) < occupyTicks)
+                    return true;
+            }
+            return false;
+        }
+
+        private DateTime PlaceTargetLabelTime(DateTime startTime, DateTime endTime, double price, out bool atRight)
+        {
+            DateTime mid = TargetLabelTime(startTime, endTime);
+            DateTime right = endTime;
+            if (right <= mid)
+            {
+                atRight = false;
+                _stagLabelPrices.Add(price);
+                _stagLabelTimes.Add(mid);
+                return mid;
+            }
+
+            double newness = LabelNewness(startTime);
+            DateTime preferred = LerpTime(right, mid, newness);
+
+            DateTime chosen = preferred;
+            bool hasClose = false;
+            bool neighborAtMid = false;
+            for (int i = 0; i < _stagLabelPrices.Count; i++)
+            {
+                if (!PricesCloseForLabel(_stagLabelPrices[i], price))
+                    continue;
+                hasClose = true;
+                if (Math.Abs((_stagLabelTimes[i] - mid).Ticks) <= Math.Abs((_stagLabelTimes[i] - right).Ticks))
+                    neighborAtMid = true;
+            }
+
+            if (hasClose)
+            {
+                DateTime first = neighborAtMid ? right : mid;
+                DateTime second = neighborAtMid ? mid : right;
+                if (!LabelSlotTaken(first, price))
+                    chosen = first;
+                else if (!LabelSlotTaken(second, price))
+                    chosen = second;
+                else
+                    chosen = LerpTime(mid, right, 0.5);
+            }
+            else if (LabelSlotTaken(preferred, price))
+            {
+                DateTime alt = newness >= 0.5 ? right : mid;
+                chosen = LabelSlotTaken(alt, price) ? LerpTime(mid, right, 0.5) : alt;
+            }
+
+            atRight = Math.Abs((chosen - right).Ticks) <= Math.Abs((chosen - mid).Ticks);
+            _stagLabelPrices.Add(price);
+            _stagLabelTimes.Add(chosen);
+            return chosen;
         }
 
         // ───────────────────────── Drawing: cleanup / nodes / zig-zag ─────────────────────────
@@ -2198,14 +2293,12 @@ namespace cAlgo.Indicators
         {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
-            DateTime midTime = TargetLabelTime(startTime, endTime);
-            TimeSpan extra = TimeSpan.FromTicks(AverageBarDuration().Ticks * Math.Max(4, LabelStaggerStep) * 4);
-            DateTime labelMax = endTime + extra;
-            DateTime labelTime = StaggerLabelTime(midTime, price, labelMax);
+            bool atRight;
+            DateTime labelTime = PlaceTargetLabelTime(startTime, endTime, price, out atRight);
             var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, price, labelColor);
             txt.FontSize = TargetFontSizeValue();
             txt.VerticalAlignment = VerticalAlignment.Center;
-            txt.HorizontalAlignment = HorizontalAlignment.Center;
+            txt.HorizontalAlignment = atRight ? HorizontalAlignment.Right : HorizontalAlignment.Center;
         }
 
         private void DrawingDayOpenClose()
