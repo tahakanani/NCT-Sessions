@@ -47,7 +47,10 @@ namespace cAlgo.Indicators
         [Parameter("Incomplete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
         public bool ShowIncomplete2Circle { get; set; }
 
-        [Parameter("Incomplete 2 Circle Size", DefaultValue = 16, MinValue = 6, MaxValue = 72, Group = "Visual Customization")]
+        [Parameter("Complete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
+        public bool ShowComplete2Circle { get; set; }
+
+        [Parameter("Node 2 Circle Size", DefaultValue = 16, MinValue = 6, MaxValue = 72, Group = "Visual Customization")]
         public int Incomplete2CircleSize { get; set; }
 
         [Parameter("Color 1", DefaultValue = "#FFE566", Group = "Visual Customization")]
@@ -1607,6 +1610,7 @@ namespace cAlgo.Indicators
               .Append(PairMaxCount).Append('|')
               .Append(TargetLabelFontSize).Append('|')
               .Append(ShowIncomplete2Circle).Append('|')
+              .Append(ShowComplete2Circle).Append('|')
               .Append(Incomplete2CircleSize).Append('|')
               .Append(TextNodeSize).Append('|')
               .Append(TargetGapBars).Append('|')
@@ -1864,7 +1868,11 @@ namespace cAlgo.Indicators
                     if (IsIncompleteNode2(nodes, i, swUptrendType))
                     {
                         DrawIncompleteNode2Underline(barIdx, y, swUptrendType, textColor);
-                        DrawIncompleteNode2Circle(barIdx, y);
+                        DrawNode2Circle(barIdx, y, Color.Red, ShowIncomplete2Circle);
+                    }
+                    else if (i > 0 && nodes[i].NumberNode == 2 && nodes[i - 1].NumberNode == 1)
+                    {
+                        DrawNode2Circle(barIdx, y, Color.Lime, ShowComplete2Circle);
                     }
 
                     if (node.IsSymmetrySetup)
@@ -1937,13 +1945,13 @@ namespace cAlgo.Indicators
                 t0, lineY, t1, lineY, color, 2);
         }
 
-        private void DrawIncompleteNode2Circle(int barIdx, double y)
+        private void DrawNode2Circle(int barIdx, double y, Color color, bool enabled)
         {
-            if (!ShowIncomplete2Circle)
+            if (!enabled)
                 return;
 
             int size = Math.Max(6, Math.Min(Incomplete2CircleSize, 72));
-            var dot = Chart.DrawText(NextName("Inc2Dot"), "●", Bars.OpenTimes[barIdx], y, Color.Red);
+            var dot = Chart.DrawText(NextName("N2Dot"), "●", Bars.OpenTimes[barIdx], y, color);
             dot.FontSize = size;
             dot.VerticalAlignment = VerticalAlignment.Center;
             dot.HorizontalAlignment = HorizontalAlignment.Center;
