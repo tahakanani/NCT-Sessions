@@ -370,6 +370,9 @@ namespace cAlgo.Indicators
         private readonly List<Color> _colors = new List<Color>();
         private readonly List<double> _stagLabelPrices = new List<double>();
         private readonly List<DateTime> _stagLabelTimes = new List<DateTime>();
+        private double _labelVisTop = 1;
+        private double _labelVisBot;
+        private double _labelVisHeight = 400;
 
         private int _objSeq;
         private string _lastDrawSignature;
@@ -508,6 +511,7 @@ namespace cAlgo.Indicators
                 _stagLabelPrices.Clear();
                 _stagLabelTimes.Clear();
                 _objSeq = 0;
+                CaptureLabelPriceRange();
 
                 if (_nodesUp.Count > 0)
                     DrawingNumberNodes(true);
@@ -2220,53 +2224,56 @@ namespace cAlgo.Indicators
             return TimeSpan.FromMinutes(1);
         }
 
-        private bool TryVisiblePriceRange(out double top, out double bot)
+        private void CaptureLabelPriceRange()
         {
-            top = double.NaN;
-            bot = double.NaN;
+            _labelVisHeight = 400;
+            _labelVisTop = 1;
+            _labelVisBot = 0;
 
-            double cTop = Chart.TopY;
-            double cBot = Chart.BottomY;
-            if (!double.IsNaN(cTop) && !double.IsNaN(cBot) && Math.Abs(cTop - cBot) > 1e-12)
+            try
             {
-                top = Math.Max(cTop, cBot);
-                bot = Math.Min(cTop, cBot);
+                double h = Chart.Height;
+                if (h >= 2 && !double.IsNaN(h) && !double.IsInfinity(h))
+                    _labelVisHeight = h;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                double top = Chart.TopY;
+                double bot = Chart.BottomY;
+                if (!double.IsNaN(top) && !double.IsNaN(bot) && Math.Abs(top - bot) > 1e-12)
+                {
+                    _labelVisTop = Math.Max(top, bot);
+                    _labelVisBot = Math.Min(top, bot);
+                    return;
+                }
+            }
+            catch
+            {
             }
 
             if (Bars == null || Bars.Count == 0)
-                return !double.IsNaN(top);
+                return;
 
-            int i0 = 0;
-            int i1 = Bars.Count - 1;
-            int firstVis = Chart.FirstVisibleBarIndex;
-            int lastVis = Chart.LastVisibleBarIndex;
-            if (firstVis >= 0)
-                i0 = Math.Max(0, firstVis);
-            if (lastVis >= 0)
-                i1 = Math.Min(Bars.Count - 1, lastVis);
-            if (i1 < i0)
-            {
-                i0 = 0;
-                i1 = Bars.Count - 1;
-            }
-
+            int last = Bars.Count - 1;
+            int first = Math.Max(0, last - 250);
             double hi = double.MinValue;
             double lo = double.MaxValue;
-            for (int i = i0; i <= i1; i++)
+            for (int i = first; i <= last; i++)
             {
                 if (Bars.HighPrices[i] > hi)
                     hi = Bars.HighPrices[i];
                 if (Bars.LowPrices[i] < lo)
                     lo = Bars.LowPrices[i];
             }
-
-            if (hi > lo && (double.IsNaN(top) || (hi - lo) < (top - bot)))
+            if (hi > lo)
             {
-                top = hi;
-                bot = lo;
+                _labelVisTop = hi;
+                _labelVisBot = lo;
             }
-
-            return !double.IsNaN(top) && top > bot;
         }
 
         private bool PricesCloseForLabel(double a, double b)
@@ -2275,18 +2282,11 @@ namespace cAlgo.Indicators
             if (Math.Abs(a - b) / refP * 100.0 <= LabelCollisionTolerancePct)
                 return true;
 
-            double top;
-            double bot;
-            if (!TryVisiblePriceRange(out top, out bot))
+            double range = _labelVisTop - _labelVisBot;
+            if (range <= 1e-12)
                 return false;
 
-            double range = top - bot;
-            double height = Chart.Height;
-            if (height < 2)
-                height = 400;
-
-            double dyPx = Math.Abs(a - b) / range * height;
-            // Two centered labels overlap when lines are closer than ~3× font height.
+            double dyPx = Math.Abs(a - b) / range * _labelVisHeight;
             return dyPx <= TargetFontSizeValue() * 3.2;
         }
 
