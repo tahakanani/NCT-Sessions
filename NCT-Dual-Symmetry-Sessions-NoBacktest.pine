@@ -681,6 +681,17 @@ isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
                 result := swUptrendType ? n2.highNode < minPrice : n2.highNode > minPrice
     result
 
+// نود ۱ هنوز ستاپ فعال است؟ (بعدش نود ۱ جدیدتر شروع نشده)
+isActiveNode1Setup(array<Node> nodesRef, int node1Idx) =>
+    bool active = true
+    int sz = nodesRef.size()
+    if node1Idx + 1 < sz
+        for j = node1Idx + 1 to sz - 1
+            if nodesRef.get(j).numberNode == 1
+                active := false
+                break
+    active
+
 // دایره توپر — شعاع قیمتی (%) و شعاع افقی (bars)
 drawCircleMarker(int barIdx, float price, float radiusPct, int radiusBars, color lineCol, int fillTransp) =>
     if canDrawPolyline() and not na(price) and not na(barIdx) and radiusPct > 0 and radiusBars > 0

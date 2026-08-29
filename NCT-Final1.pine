@@ -681,6 +681,17 @@ isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
                 result := swUptrendType ? n2.highNode < minPrice : n2.highNode > minPrice
     result
 
+// نود ۱ هنوز ستاپ فعال است؟ (بعدش نود ۱ جدیدتر شروع نشده)
+isActiveNode1Setup(array<Node> nodesRef, int node1Idx) =>
+    bool active = true
+    int sz = nodesRef.size()
+    if node1Idx + 1 < sz
+        for j = node1Idx + 1 to sz - 1
+            if nodesRef.get(j).numberNode == 1
+                active := false
+                break
+    active
+
 // دایره توپر — شعاع قیمتی (%) و شعاع افقی (bars)
 drawCircleMarker(int barIdx, float price, float radiusPct, int radiusBars, color lineCol, int fillTransp) =>
     if canDrawPolyline() and not na(price) and not na(barIdx) and radiusPct > 0 and radiusBars > 0
@@ -870,16 +881,16 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         float startNode1 = node.lowPreNode
                         float doubleEnd = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
                         targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
-                        proxDbl086Price := targetDouble086Price
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete086
+                            proxDbl086Price := targetDouble086Price
                             drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.85DOUBLE1", gapBars, lane)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
-                        proxMinPrice := targetMinPrice
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
+                            proxMinPrice := targetMinPrice
                             drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
                         // فقط وقتی نود ۲ بعدی ناقص است؛ با کامل شدن نود ۲ دیگر رسم نمی‌شود
                         if node2Incomplete
@@ -888,10 +899,11 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                             if not shouldDelete085
                                 drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
 
-                    // دایره سبز وقتی Min 1 و 0.85DOUBLE1 نزدیک‌اند (هر دو برای همین نود ۱ بدون نود ۲)
-                    if pricesWithinTolPct(proxMinPrice, proxDbl086Price, minDblProxTolPct)
+                    // دایره سبز: فقط وقتی هر دو تارگت روی چارت هستند، نود ۲ ندارند، و ستاپ هنوز جایگزین نشده
+                    if showMin and showDouble086 and not hasNode2 and isActiveNode1Setup(nodesRef, i) and pricesWithinTolPct(proxMinPrice, proxDbl086Price, minDblProxTolPct)
                         float proxY = (proxMinPrice + proxDbl086Price) / 2.0
-                        drawMinDoubleProximityMarker(node.indexNode, proxY, proxRadiusPct, proxRadiusBars, proxColor, proxFillTransp)
+                        int proxBar = int(math.round((node.indexPreNode + node.indexCorrection) / 2.0))
+                        drawMinDoubleProximityMarker(proxBar, proxY, proxRadiusPct, proxRadiusBars, proxColor, proxFillTransp)
 
                     // نود ۱ بیس‌شده: اصلاح ≥ basedRetrace؛ تارگت basedMinExt×Min1 تا قبل از کامل شدن نود ۲
                     if showBasedMin13 and isBasedNode1(node, basedRetraceRatio) and node2NotComplete
