@@ -240,7 +240,7 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Label Anti-Overlap ─────────────────────────
 
-        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.08, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
+        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.2, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
         public double LabelCollisionTolerancePct { get; set; }
 
         [Parameter("Label Stagger Step (bars)", DefaultValue = 24, MinValue = 2, MaxValue = 200, Group = "Target Label Anti-Overlap")]
@@ -2220,21 +2220,74 @@ namespace cAlgo.Indicators
             return TimeSpan.FromMinutes(1);
         }
 
+        private bool TryVisiblePriceRange(out double top, out double bot)
+        {
+            top = double.NaN;
+            bot = double.NaN;
+
+            double cTop = Chart.TopY;
+            double cBot = Chart.BottomY;
+            if (!double.IsNaN(cTop) && !double.IsNaN(cBot) && Math.Abs(cTop - cBot) > 1e-12)
+            {
+                top = Math.Max(cTop, cBot);
+                bot = Math.Min(cTop, cBot);
+            }
+
+            if (Bars == null || Bars.Count == 0)
+                return !double.IsNaN(top);
+
+            int i0 = 0;
+            int i1 = Bars.Count - 1;
+            int firstVis = Chart.FirstVisibleBarIndex;
+            int lastVis = Chart.LastVisibleBarIndex;
+            if (firstVis >= 0)
+                i0 = Math.Max(0, firstVis);
+            if (lastVis >= 0)
+                i1 = Math.Min(Bars.Count - 1, lastVis);
+            if (i1 < i0)
+            {
+                i0 = 0;
+                i1 = Bars.Count - 1;
+            }
+
+            double hi = double.MinValue;
+            double lo = double.MaxValue;
+            for (int i = i0; i <= i1; i++)
+            {
+                if (Bars.HighPrices[i] > hi)
+                    hi = Bars.HighPrices[i];
+                if (Bars.LowPrices[i] < lo)
+                    lo = Bars.LowPrices[i];
+            }
+
+            if (hi > lo && (double.IsNaN(top) || (hi - lo) < (top - bot)))
+            {
+                top = hi;
+                bot = lo;
+            }
+
+            return !double.IsNaN(top) && top > bot;
+        }
+
         private bool PricesCloseForLabel(double a, double b)
         {
             double refP = Math.Max(Math.Max(Math.Abs(a), Math.Abs(b)), 1e-7);
             if (Math.Abs(a - b) / refP * 100.0 <= LabelCollisionTolerancePct)
                 return true;
 
-            double top = Chart.TopY;
-            double bot = Chart.BottomY;
-            double height = Chart.Height;
-            double range = Math.Abs(top - bot);
-            if (height < 2 || range < 1e-12)
+            double top;
+            double bot;
+            if (!TryVisiblePriceRange(out top, out bot))
                 return false;
 
+            double range = top - bot;
+            double height = Chart.Height;
+            if (height < 2)
+                height = 400;
+
             double dyPx = Math.Abs(a - b) / range * height;
-            return dyPx <= TargetFontSizeValue() * 1.5;
+            // Two centered labels overlap when lines are closer than ~3× font height.
+            return dyPx <= TargetFontSizeValue() * 3.2;
         }
 
         private DateTime StaggerLabelTime(DateTime preferred, double price)
