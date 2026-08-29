@@ -41,25 +41,25 @@ namespace cAlgo.Indicators
         [Parameter("Font Size (Node Numbers)", DefaultValue = "Normal", Group = "Visual Customization")]
         public string TextNodeSize { get; set; }
 
-        [Parameter("Target Font Size", DefaultValue = 10, MinValue = 1, MaxValue = 72, Group = "Visual Customization")]
+        [Parameter("Target Font Size", DefaultValue = 9, MinValue = 1, MaxValue = 72, Group = "Visual Customization")]
         public int TargetLabelFontSize { get; set; }
 
         [Parameter("Incomplete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
         public bool ShowIncomplete2Circle { get; set; }
 
-        [Parameter("Incomplete 2 Circle Radius (%)", DefaultValue = 0.004, MinValue = 0.001, MaxValue = 5.0, Group = "Visual Customization")]
+        [Parameter("Incomplete 2 Circle Radius (%)", DefaultValue = 0.002, MinValue = 0.001, MaxValue = 5.0, Group = "Visual Customization")]
         public double Incomplete2RadiusPct { get; set; }
 
         [Parameter("Incomplete 2 Circle Radius (Bars)", DefaultValue = 1, MinValue = 1, MaxValue = 50, Group = "Visual Customization")]
         public int Incomplete2RadiusBars { get; set; }
 
-        [Parameter("Incomplete 2 Circle Fill Transparency", DefaultValue = 40, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
+        [Parameter("Incomplete 2 Circle Fill Transparency", DefaultValue = 60, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
         public int Incomplete2FillTransp { get; set; }
 
         [Parameter("Min1 ↔ 0.8DL.1 Green Circle", DefaultValue = true, Group = "Visual Customization")]
         public bool ShowProxCircle { get; set; }
 
-        [Parameter("Min1 ↔ 0.8DL.1 Proximity (%)", DefaultValue = 0.15, MinValue = 0.01, MaxValue = 5.0, Group = "Visual Customization")]
+        [Parameter("Min1 ↔ 0.8DL.1 Proximity (%)", DefaultValue = 0.01, MinValue = 0.01, MaxValue = 5.0, Group = "Visual Customization")]
         public double MinDblProximityTolPct { get; set; }
 
         [Parameter("Proximity Circle Radius (%)", DefaultValue = 0.002, MinValue = 0.001, MaxValue = 5.0, Group = "Visual Customization")]
@@ -68,7 +68,7 @@ namespace cAlgo.Indicators
         [Parameter("Proximity Circle Radius (Bars)", DefaultValue = 1, MinValue = 1, MaxValue = 50, Group = "Visual Customization")]
         public int ProxRadiusBars { get; set; }
 
-        [Parameter("Proximity Circle Fill Transparency", DefaultValue = 40, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
+        [Parameter("Proximity Circle Fill Transparency", DefaultValue = 60, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
         public int ProxFillTransp { get; set; }
 
         [Parameter("Color 1", DefaultValue = "#FFE566", Group = "Visual Customization")]
