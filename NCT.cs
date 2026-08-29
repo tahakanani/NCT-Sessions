@@ -127,7 +127,7 @@ namespace cAlgo.Indicators
         [Parameter("Based Min Extension", DefaultValue = 1.3, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
         public double BasedMin13Ratio { get; set; }
 
-        [Parameter("Show Correction (Single)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show Correction (Single)", DefaultValue = false, Group = "Node Targets")]
         public bool ShowCorrection { get; set; }
 
         [Parameter("Show Pair Min", DefaultValue = true, Group = "Node Targets")]
@@ -139,7 +139,7 @@ namespace cAlgo.Indicators
         [Parameter("Show Pair Double", DefaultValue = true, Group = "Node Targets")]
         public bool ShowPairDouble { get; set; }
 
-        [Parameter("Show Pair Correction", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show Pair Correction", DefaultValue = false, Group = "Node Targets")]
         public bool ShowPairCorrection { get; set; }
 
         [Parameter("Target Gap Bars", DefaultValue = 150, MinValue = 3, MaxValue = 500, Group = "Node Targets")]
@@ -235,7 +235,7 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Day OC Panel ─────────────────────────
 
-        [Parameter("Show Day OC Panel", DefaultValue = true, Group = "Day Open/Close")]
+        [Parameter("Show Day OC Panel", DefaultValue = false, Group = "Day Open/Close")]
         public bool ShowDayOcPanel { get; set; }
 
         // ───────────────────────── Label Anti-Overlap ─────────────────────────
@@ -277,7 +277,7 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Fair Value Gap ─────────────────────────
 
-        [Parameter("Enable Fair Value Gap", DefaultValue = true, Group = "Fair Value Gap")]
+        [Parameter("Enable Fair Value Gap", DefaultValue = false, Group = "Fair Value Gap")]
         public bool EnableFvg { get; set; }
 
         [Parameter("FVG Threshold %", DefaultValue = 0.0, MinValue = 0, MaxValue = 100, Group = "Fair Value Gap")]
@@ -362,6 +362,9 @@ namespace cAlgo.Indicators
 
         [Parameter("MAP Extension Color", DefaultValue = "#C084FC", Group = "MAP Weekly")]
         public string MapExtColorName { get; set; }
+
+        [Parameter("MAP Transparency (0-100)", DefaultValue = 85, MinValue = 0, MaxValue = 100, Group = "MAP Weekly")]
+        public int MapTransparency { get; set; }
 
         // ───────────────────────── State ─────────────────────────
 
@@ -1616,6 +1619,7 @@ namespace cAlgo.Indicators
               .Append(RoundBasePrice.ToString("R")).Append('|')
               .Append(EnableFvg).Append('|')
               .Append(EnableMapWeekly).Append('|')
+              .Append(MapTransparency).Append('|')
               .Append(MapShow150).Append('|')
               .Append(FvgExtend).Append('|')
               .Append(FvgThresholdPer.ToString("R")).Append('|')
@@ -2342,12 +2346,24 @@ namespace cAlgo.Indicators
         }
 
         private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
-            int width, LineStyle style, string label, Color labelColor)
+            int width, LineStyle style, string label, Color labelColor, bool pinLabelAtEnd = false)
         {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
+            DateTime labelTime;
             bool atRight;
-            DateTime labelTime = PlaceTargetLabelTime(startTime, endTime, price, out atRight);
+            if (pinLabelAtEnd)
+            {
+                labelTime = endTime;
+                atRight = true;
+                _stagLabelPrices.Add(price);
+                _stagLabelTimes.Add(labelTime);
+            }
+            else
+            {
+                labelTime = PlaceTargetLabelTime(startTime, endTime, price, out atRight);
+            }
+
             var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, price, labelColor);
             txt.FontSize = TargetFontSizeValue();
             txt.VerticalAlignment = VerticalAlignment.Center;
@@ -2374,7 +2390,7 @@ namespace cAlgo.Indicators
                 if (openToday > 0 && !double.IsNaN(openToday))
                 {
                     DrawTargetLine(startTime, endTime, openToday, Color.Lime, 2, LineStyle.Solid,
-                        "H Day Open", Color.Lime);
+                        "H Day Open", Color.Lime, true);
                 }
             }
 
@@ -2384,7 +2400,7 @@ namespace cAlgo.Indicators
                 if (closeYesterday > 0 && !double.IsNaN(closeYesterday))
                 {
                     DrawTargetLine(startTime, endTime, closeYesterday, Color.Red, 2, LineStyle.Dots,
-                        "L Day Close", Color.Red);
+                        "L Day Close", Color.Red, true);
                 }
             }
 
@@ -2400,11 +2416,6 @@ namespace cAlgo.Indicators
                     Color fill = Color.FromArgb(40, 30, 80, 180);
                     var box = Chart.DrawRectangle(NextName("OcBox"), startTime, boxTop, endTime, boxBot, fill);
                     box.IsFilled = true;
-                    DateTime lblT = StaggerLabelTime(endTime, boxTop);
-                    var lbl = Chart.DrawText(NextName("OcLbl"), "OC Panel", lblT, boxTop, Color.White);
-                    lbl.FontSize = TargetFontSizeValue();
-                    lbl.HorizontalAlignment = HorizontalAlignment.Left;
-                    lbl.VerticalAlignment = VerticalAlignment.Top;
                 }
             }
         }
@@ -2753,11 +2764,11 @@ namespace cAlgo.Indicators
             DateTime lineStart = FindCurrentWeekStart(currentWeekOpen);
             DateTime lineEnd = TimeAtIndex(lastIndex + TargetGapBars);
 
-            Color highColor = ParseColor(MapHighColorName, Color.FromArgb(255, 255, 77, 109));
-            Color lowColor = ParseColor(MapLowColorName, Color.FromArgb(255, 124, 255, 71));
-            Color midColor = ParseColor(MapMidColorName, Color.FromArgb(255, 255, 229, 102));
-            Color retraceColor = ParseColor(MapRetraceColorName, Color.FromArgb(255, 122, 162, 255));
-            Color extColor = ParseColor(MapExtColorName, Color.FromArgb(255, 192, 132, 252));
+            Color highColor = ColorWithAlphaPct(ParseColor(MapHighColorName, Color.FromArgb(255, 255, 77, 109)), MapTransparency);
+            Color lowColor = ColorWithAlphaPct(ParseColor(MapLowColorName, Color.FromArgb(255, 124, 255, 71)), MapTransparency);
+            Color midColor = ColorWithAlphaPct(ParseColor(MapMidColorName, Color.FromArgb(255, 255, 229, 102)), MapTransparency);
+            Color retraceColor = ColorWithAlphaPct(ParseColor(MapRetraceColorName, Color.FromArgb(255, 122, 162, 255)), MapTransparency);
+            Color extColor = ColorWithAlphaPct(ParseColor(MapExtColorName, Color.FromArgb(255, 192, 132, 252)), MapTransparency);
             LineStyle keyStyle = LineStyle.Solid;
             LineStyle midStyle = LineStyle.Dots;
             LineStyle extStyle = LineStyle.DotsRare;
