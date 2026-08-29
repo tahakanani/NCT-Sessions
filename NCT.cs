@@ -1,5 +1,5 @@
 // NCT Dual Symmetry Indicator for cTrader Automate
-// Port of Pine core engine + node targets + Asia session (no POV)
+// Paste this entire file over TAHA3.cs (select all, replace). Do not merge with old Pine code.
 using System;
 using System.Collections.Generic;
 using cAlgo.API;
@@ -8,7 +8,7 @@ using cAlgo.API.Internals;
 namespace cAlgo.Indicators
 {
     [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-    public class NCT : Indicator
+    public class TAHA3 : Indicator
     {
         // ───────────────────────── Nodal / Strategy ─────────────────────────
 
@@ -2346,7 +2346,13 @@ namespace cAlgo.Indicators
         }
 
         private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
-            int width, LineStyle style, string label, Color labelColor, bool pinLabelAtEnd = false)
+            int width, LineStyle style, string label, Color labelColor)
+        {
+            DrawTargetLine(startTime, endTime, price, lineColor, width, style, label, labelColor, false);
+        }
+
+        private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
+            int width, LineStyle style, string label, Color labelColor, bool pinLabelAtEnd)
         {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
