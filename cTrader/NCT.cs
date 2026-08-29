@@ -88,34 +88,34 @@ namespace cAlgo.Indicators
         [Parameter("Show Target Down", DefaultValue = true, Group = "Node Targets")]
         public bool ShowTargetDown { get; set; }
 
-        [Parameter("Show Double (Single)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show Double.1 (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble { get; set; }
 
-        [Parameter("Show 1.5 Double (Single)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show 1.5DL.1 (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble15 { get; set; }
 
-        [Parameter("1.5 Double Ratio", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
+        [Parameter("1.5DL.1 Ratio", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Group = "Node Targets")]
         public double Double15Ratio { get; set; }
 
-        [Parameter("Show 0.85DOUBLE1 (Single)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show 0.8DL.1 (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowDouble086 { get; set; }
 
         [Parameter("Start→Double Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Double086Ratio { get; set; }
 
-        [Parameter("0.85DOUBLE1 Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Node Targets")]
+        [Parameter("0.8DL.1 Line Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Node Targets")]
         public int Double086LineWidth { get; set; }
 
-        [Parameter("0.85DOUBLE1 Line Style", DefaultValue = "Dotted", Group = "Node Targets")]
+        [Parameter("0.8DL.1 Line Style", DefaultValue = "Dotted", Group = "Node Targets")]
         public string Double086LineStyleName { get; set; }
 
         [Parameter("Show Min (Single)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin { get; set; }
 
-        [Parameter("Show 0.85MIN1 (Incomplete 2)", DefaultValue = true, Group = "Node Targets")]
+        [Parameter("Show 0.8Min.1 (Incomplete 2)", DefaultValue = true, Group = "Node Targets")]
         public bool ShowMin085 { get; set; }
 
-        [Parameter("0.85MIN1 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
+        [Parameter("0.8Min.1 Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node Targets")]
         public double Min085Ratio { get; set; }
 
         [Parameter("Show 1.3MIN1 (Based Node 1)", DefaultValue = true, Group = "Node Targets")]
@@ -1936,7 +1936,7 @@ namespace cAlgo.Indicators
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
-                            trendPrefix + "Double 1", labelColor);
+                            trendPrefix + "Double.1", labelColor);
                     }
                 }
 
@@ -1947,13 +1947,13 @@ namespace cAlgo.Indicators
                     if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, DoubleLineWidth, styleDash,
-                            trendPrefix + "1.5DOUBLE", labelColor);
+                            trendPrefix + "1.5DL.1", labelColor);
                     }
                 }
 
                 if (ShowDouble086)
                 {
-                    // Keep 0.85DOUBLE1 until this node 1 gets its own following node 2.
+                    // Keep 0.8DL.1 until this node 1 gets its own following node 2.
                     bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
                     if (!hasRelatedNode2)
                     {
@@ -1964,7 +1964,7 @@ namespace cAlgo.Indicators
                         {
                             DrawTargetLine(startTime, endTime, price, lineColor, Double086LineWidth,
                                 ParseLineStyle(Double086LineStyleName),
-                                trendPrefix + Double086Ratio.ToString("0.##") + "DOUBLE1", labelColor);
+                                trendPrefix + "0.8DL.1", labelColor);
                         }
                     }
                 }
@@ -1980,7 +1980,7 @@ namespace cAlgo.Indicators
                     }
                 }
 
-                // 0.85MIN1 only while node 2 is incomplete; drop it when that setup's node 2 completes.
+                // 0.8Min.1 only while node 2 is incomplete; drop it when that setup's node 2 completes.
                 if (ShowMin085
                     && !FollowingNode2IsComplete(nodes, i, swUptrendType)
                     && i + 1 < nodes.Count
@@ -1993,7 +1993,7 @@ namespace cAlgo.Indicators
                     {
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth,
                             ParseLineStyle(Double086LineStyleName),
-                            trendPrefix + Min085Ratio.ToString("0.##") + "MIN1", labelColor);
+                            trendPrefix + "0.8Min.1", labelColor);
                     }
                 }
 
