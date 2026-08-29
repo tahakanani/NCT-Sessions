@@ -47,11 +47,29 @@ namespace cAlgo.Indicators
         [Parameter("Incomplete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
         public bool ShowIncomplete2Circle { get; set; }
 
-        [Parameter("Complete 2 Circle", DefaultValue = true, Group = "Visual Customization")]
-        public bool ShowComplete2Circle { get; set; }
+        [Parameter("Incomplete 2 Circle Radius (%)", DefaultValue = 0.004, MinValue = 0.001, MaxValue = 5.0, Group = "Visual Customization")]
+        public double Incomplete2RadiusPct { get; set; }
 
-        [Parameter("Node 2 Circle Size", DefaultValue = 16, MinValue = 6, MaxValue = 72, Group = "Visual Customization")]
-        public int Incomplete2CircleSize { get; set; }
+        [Parameter("Incomplete 2 Circle Radius (Bars)", DefaultValue = 1, MinValue = 1, MaxValue = 50, Group = "Visual Customization")]
+        public int Incomplete2RadiusBars { get; set; }
+
+        [Parameter("Incomplete 2 Circle Fill Transparency", DefaultValue = 40, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
+        public int Incomplete2FillTransp { get; set; }
+
+        [Parameter("Min1 ↔ 0.8DL.1 Green Circle", DefaultValue = true, Group = "Visual Customization")]
+        public bool ShowProxCircle { get; set; }
+
+        [Parameter("Min1 ↔ 0.8DL.1 Proximity (%)", DefaultValue = 0.15, MinValue = 0.01, MaxValue = 5.0, Group = "Visual Customization")]
+        public double MinDblProximityTolPct { get; set; }
+
+        [Parameter("Proximity Circle Radius (%)", DefaultValue = 0.002, MinValue = 0.001, MaxValue = 5.0, Group = "Visual Customization")]
+        public double ProxRadiusPct { get; set; }
+
+        [Parameter("Proximity Circle Radius (Bars)", DefaultValue = 1, MinValue = 1, MaxValue = 50, Group = "Visual Customization")]
+        public int ProxRadiusBars { get; set; }
+
+        [Parameter("Proximity Circle Fill Transparency", DefaultValue = 40, MinValue = 0, MaxValue = 100, Group = "Visual Customization")]
+        public int ProxFillTransp { get; set; }
 
         [Parameter("Color 1", DefaultValue = "#FFE566", Group = "Visual Customization")]
         public string Color1Name { get; set; }
@@ -1610,8 +1628,10 @@ namespace cAlgo.Indicators
               .Append(PairMaxCount).Append('|')
               .Append(TargetLabelFontSize).Append('|')
               .Append(ShowIncomplete2Circle).Append('|')
-              .Append(ShowComplete2Circle).Append('|')
-              .Append(Incomplete2CircleSize).Append('|')
+              .Append(Incomplete2RadiusPct.ToString("R")).Append('|')
+              .Append(Incomplete2RadiusBars).Append('|')
+              .Append(ShowProxCircle).Append('|')
+              .Append(MinDblProximityTolPct.ToString("R")).Append('|')
               .Append(TextNodeSize).Append('|')
               .Append(TargetGapBars).Append('|')
               .Append(DeleteHitTargets).Append('|')
@@ -1868,11 +1888,8 @@ namespace cAlgo.Indicators
                     if (IsIncompleteNode2(nodes, i, swUptrendType))
                     {
                         DrawIncompleteNode2Underline(barIdx, y, swUptrendType, textColor);
-                        DrawNode2Circle(barIdx, y, Color.Red, ShowIncomplete2Circle);
-                    }
-                    else if (i > 0 && nodes[i].NumberNode == 2 && nodes[i - 1].NumberNode == 1)
-                    {
-                        DrawNode2Circle(barIdx, y, Color.Lime, ShowComplete2Circle);
+                        if (ShowIncomplete2Circle)
+                            DrawCircleMarker(node.IndexNode, node.HighNode, Incomplete2RadiusPct, Incomplete2RadiusBars, Color.Red, Incomplete2FillTransp);
                     }
 
                     if (node.IsSymmetrySetup)
@@ -1921,6 +1938,47 @@ namespace cAlgo.Indicators
             return !IsIncompleteNode2(nodes, i2, swUptrendType);
         }
 
+        private bool IsActiveNode1Setup(List<Node> nodes, int node1Idx)
+        {
+            for (int j = node1Idx + 1; j < nodes.Count; j++)
+            {
+                if (nodes[j].NumberNode == 1)
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool PricesWithinTolPct(double a, double b, double tolPct)
+        {
+            if (double.IsNaN(a) || double.IsNaN(b) || Math.Abs(a) <= 0)
+                return false;
+            return Math.Abs(a - b) / Math.Abs(a) * 100.0 <= tolPct;
+        }
+
+        private void DrawCircleMarker(int barIdx, double price, double radiusPct, int radiusBars, Color lineCol, int fillTransp)
+        {
+            if (double.IsNaN(price) || price <= 0 || radiusPct <= 0 || radiusBars <= 0)
+                return;
+
+            double rPrice = Math.Abs(price) * radiusPct / 100.0;
+            if (rPrice <= 0)
+                return;
+
+            DateTime t0 = TimeAtIndex(barIdx - radiusBars);
+            DateTime t1 = TimeAtIndex(barIdx + radiusBars);
+            if (t1 <= t0)
+                t1 = t0.AddMinutes(1);
+
+            int t = fillTransp;
+            if (t < 0) t = 0;
+            if (t > 100) t = 100;
+            int alpha = (100 - t) * 255 / 100;
+            Color fill = Color.FromArgb(alpha, lineCol.R, lineCol.G, lineCol.B);
+            var ell = Chart.DrawEllipse(NextName("Circ"), t0, price + rPrice, t1, price - rPrice, fill);
+            ell.IsFilled = true;
+            ell.Color = fill;
+        }
+
         private bool IsBasedNode1(Node node)
         {
             double impulse = TargetAbsMove(node.LowPreNode, node.HighNode);
@@ -1943,18 +2001,6 @@ namespace cAlgo.Indicators
 
             Chart.DrawTrendLine(NextName(swUptrendType ? "UpInc2" : "DnInc2"),
                 t0, lineY, t1, lineY, color, 2);
-        }
-
-        private void DrawNode2Circle(int barIdx, double y, Color color, bool enabled)
-        {
-            if (!enabled)
-                return;
-
-            int size = Math.Max(6, Math.Min(Incomplete2CircleSize, 72));
-            var dot = Chart.DrawText(NextName("N2Dot"), "●", Bars.OpenTimes[barIdx], y, color);
-            dot.FontSize = size;
-            dot.VerticalAlignment = VerticalAlignment.Center;
-            dot.HorizontalAlignment = HorizontalAlignment.Center;
         }
 
         private void DrawingLineNodes()
@@ -2040,6 +2086,10 @@ namespace cAlgo.Indicators
                 double correctionSize = TargetAbsMove(node.LowCorrection, node.HighNode);
                 DateTime startTime = TimeAtIndex(node.IndexNode);
 
+                bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
+                double proxMinPrice = double.NaN;
+                double proxDbl086Price = double.NaN;
+
                 if (ShowDouble)
                 {
                     double price = TargetProject(node.HighNode, moveSize, swUptrendType);
@@ -2064,8 +2114,6 @@ namespace cAlgo.Indicators
 
                 if (ShowDouble086)
                 {
-                    // Keep 0.8DL.1 until this node 1 gets its own following node 2.
-                    bool hasRelatedNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
                     if (!hasRelatedNode2)
                     {
                         double doublePrice = TargetProject(node.HighNode, moveSize, swUptrendType);
@@ -2073,6 +2121,7 @@ namespace cAlgo.Indicators
 
                         if (!ShouldDeleteHitTarget(price, node.IndexNode, swUptrendType))
                         {
+                            proxDbl086Price = price;
                             DrawTargetLine(startTime, endTime, price, lineColor, Double086LineWidth,
                                 ParseLineStyle(Double086LineStyleName),
                                 trendPrefix + "0.8DL.1", labelColor);
@@ -2086,9 +2135,22 @@ namespace cAlgo.Indicators
 
                     if (!ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
                     {
+                        proxMinPrice = price;
                         DrawTargetLine(startTime, endTime, price, lineColor, MinLineWidth, styleMin,
                             trendPrefix + "Min 1", labelColor);
                     }
+                }
+
+                if (ShowProxCircle
+                    && ShowMin
+                    && ShowDouble086
+                    && !hasRelatedNode2
+                    && IsActiveNode1Setup(nodes, i)
+                    && PricesWithinTolPct(proxMinPrice, proxDbl086Price, MinDblProximityTolPct))
+                {
+                    double proxY = (proxMinPrice + proxDbl086Price) / 2.0;
+                    int proxBar = (node.IndexPreNode + node.IndexCorrection) / 2;
+                    DrawCircleMarker(proxBar, proxY, ProxRadiusPct, ProxRadiusBars, Color.Lime, ProxFillTransp);
                 }
 
                 // 0.8Min.1 only while node 2 is incomplete; drop it when that setup's node 2 completes.
