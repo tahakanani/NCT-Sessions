@@ -2774,19 +2774,15 @@ namespace cAlgo.Indicators
             LineStyle extStyle = LineStyle.DotsRare;
 
             if (MapShowHigh)
-            {
-                DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "PW High", highColor);
-            }
+                DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "WM", highColor, true);
             if (MapShowLow)
-            {
-                DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "PW Low", lowColor);
-            }
+                DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "WM", lowColor, true);
             if (MapShowMid)
-                DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "50%", midColor);
+                DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "WM", midColor, true);
             if (MapShow25)
-                DrawTargetLine(lineStart, lineEnd, low + range * 0.25, retraceColor, 1, midStyle, "25%", retraceColor);
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.25, retraceColor, 1, midStyle, "WM", retraceColor, true);
             if (MapShow75)
-                DrawTargetLine(lineStart, lineEnd, low + range * 0.75, retraceColor, 1, midStyle, "75%", retraceColor);
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.75, retraceColor, 1, midStyle, "WM", retraceColor, true);
 
             if (MapShowExtAbove)
             {
@@ -2803,23 +2799,23 @@ namespace cAlgo.Indicators
         {
             double sign = above ? 1.0 : -1.0;
             if (MapShow1125)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.125, "1.125x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.125, color, style);
             if (MapShow125)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.25, "1.25x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.25, color, style);
             if (MapShow1375)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.375, "1.375x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.375, color, style);
             if (MapShow150)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.50, "1.5x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.50, color, style);
             if (MapShow175)
-                DrawMapExtLevel(start, end, origin + sign * range * 0.75, "1.75x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 0.75, color, style);
             if (MapShow200)
-                DrawMapExtLevel(start, end, origin + sign * range * 1.00, "2x", color, style);
+                DrawMapExtLevel(start, end, origin + sign * range * 1.00, color, style);
         }
 
-        private void DrawMapExtLevel(DateTime start, DateTime end, double price, string label,
+        private void DrawMapExtLevel(DateTime start, DateTime end, double price,
             Color color, LineStyle style)
         {
-            DrawTargetLine(start, end, price, color, 1, style, label, color);
+            DrawTargetLine(start, end, price, color, 1, style, "WM", color, true);
         }
 
         private DateTime FindCurrentWeekStart(DateTime currentWeekOpen)
