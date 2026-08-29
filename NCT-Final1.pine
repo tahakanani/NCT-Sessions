@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 //@version=6
-indicator("NCT - Dual Symmetry + Sessions (No Backtest)", shorttitle = "NCT+Sessions+MAP", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, max_polylines_count = 100, dynamic_requests = true)
+indicator("NCT Final1", shorttitle = "NCT Final1", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, max_polylines_count = 100, dynamic_requests = true)
 
 // ================================================================================================
 // بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها)
