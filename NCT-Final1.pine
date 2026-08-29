@@ -1,0 +1,1959 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=6
+indicator("NCT Final1", shorttitle = "NCT Final1", overlay = true, max_bars_back = 5000, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500, max_polylines_count = 100, dynamic_requests = true)
+
+// ================================================================================================
+// بخش الف: موتور NCT Dual Symmetry (سیمتری نودها + تارگت‌ها)
+// ================================================================================================
+
+// ================================================================================================
+// بخش ۱: تعریف Structs و Types
+// ================================================================================================
+//#region ———————————————————— STRUCTS & TYPES
+
+type Settings
+    int    startPoint       = 5000
+    int    endPoint         = 0
+    bool   swCalcSymmetry   = true
+    bool   swCalcLogarithm  = true
+    string text_node_size   = "Normal"
+    color  c1 = color.white
+    color  c2 = color.yellow
+    color  c3 = color.aqua
+    color  c4 = color.lime
+    color  c5 = color.orange
+    color  c6 = color.fuchsia
+    color  c7 = color.blue
+    color  c8 = color.red
+    bool   draw             = true
+
+type Node
+    int     indexPreNode
+    int     indexNode
+    int     indexCorrection
+    int     numberNode
+    float   lowPreNode
+    float   highNode
+    float   lowCorrection
+    float   amountCorrection
+    float   log_amountCorrection = 0.0
+    bool    isSymmetrySetup      = false
+
+type FvgGap
+    float max = na
+    float min = na
+    bool  isbull = false
+    int   t = na
+    int   createdBar = 0
+
+type Color
+    color   labelColor
+
+type NDS
+    Settings     settings
+    array<Node>  nodes
+    array<Node>  nodesUp
+    array<Node>  nodesDown
+    array<Color> colors
+
+    bool         swFirst              = true
+
+    float        priceLowest_up       = 999999.0
+    int          indexLowest_up       = 0
+    float        priceHighest_up      = 0.0
+    int          indexHighest_up      = 0
+
+    float        priceLowest_down     = 999999.0
+    int          indexLowest_down     = 0
+    float        priceHighest_down    = 0.0
+    int          indexHighest_down    = 0
+
+//#endregion
+
+// ================================================================================================
+// بخش ۲: متدهای محاسبات سیمتری
+// ================================================================================================
+//#region ———————————————————— INTERNAL CORE METHODS
+
+corrMag(Node n, bool useLog) => useLog ? n.log_amountCorrection : n.amountCorrection
+
+method calcSymmetryNodesDown(series NDS this, int i, bool useLog) =>
+    sizeNodes = this.nodesDown.size()
+    output = false
+    if i >= 3 and i < sizeNodes
+        node          = this.nodesDown.get(i)
+        prePreNode    = this.nodesDown.get(i-2)
+        prePrePreNode = this.nodesDown.get(i-3)
+
+        if prePreNode.numberNode == 2
+            if corrMag(node, useLog) >= corrMag(prePreNode, useLog)
+                if useLog
+                    amountSymmetry = math.log(prePrePreNode.lowPreNode) - math.log(prePreNode.highNode)
+                    minPrice       = math.log(prePreNode.lowCorrection) - amountSymmetry
+                    if math.log(node.highNode) <= minPrice
+                        output := true
+                else
+                    amountSymmetry = prePrePreNode.lowPreNode - prePreNode.highNode
+                    minPrice       = prePreNode.lowCorrection - amountSymmetry
+                    if node.highNode <= minPrice
+                        output := true
+    output
+
+method calcSymmetryNodesUp(series NDS this, int i, bool useLog) =>
+    sizeNodes = this.nodesUp.size()
+    output = false
+    if i >= 3 and i < sizeNodes
+        node          = this.nodesUp.get(i)
+        prePreNode    = this.nodesUp.get(i-2)
+        prePrePreNode = this.nodesUp.get(i-3)
+
+        if prePreNode.numberNode == 2
+            if corrMag(node, useLog) >= corrMag(prePreNode, useLog)
+                if useLog
+                    amountSymmetry = math.log(prePreNode.highNode)   - math.log(prePrePreNode.lowPreNode)
+                    maxPrice       = math.log(prePreNode.lowCorrection) + amountSymmetry
+                    if math.log(node.highNode) >= maxPrice
+                        output := true
+                else
+                    amountSymmetry = prePreNode.highNode      - prePrePreNode.lowPreNode
+                    maxPrice       = prePreNode.lowCorrection + amountSymmetry
+                    if node.highNode >= maxPrice
+                        output := true
+    output
+
+//#endregion
+
+// ================================================================================================
+// بخش ۳: متدهای مرتب‌سازی گره‌ها
+// ================================================================================================
+//#region ———————————————————— SORT METHODS
+
+method sortNodesDownTrend(series NDS this, bool useLog) =>
+    i = this.nodesDown.size() - 1
+    sw = false
+    if this.nodesDown.size() > 0
+        sw := true
+    while sw
+        node = this.nodesDown.get(i)
+        if this.nodesDown.size() <= 1
+            if node.lowCorrection >= node.lowPreNode
+                this.nodesDown.remove(0)
+            break
+        preNode = this.nodesDown.get(i - 1)
+        if node.lowCorrection < preNode.lowCorrection
+            if corrMag(node, useLog) < corrMag(preNode, useLog)
+                node.numberNode := 1
+                this.nodesDown.set(i , node)
+                break
+            if corrMag(node, useLog) >= corrMag(preNode, useLog)
+                if preNode.numberNode == 1
+                    if this.settings.swCalcSymmetry == true
+                        isSymmetry = this.calcSymmetryNodesDown(i, useLog)
+                        if isSymmetry
+                            prePrePreNode      = this.nodesDown.get(i - 3)
+                            node.indexPreNode := prePrePreNode.indexPreNode
+                            node.lowPreNode   := prePrePreNode.lowPreNode
+                            node.numberNode   := 1
+                            node.isSymmetrySetup := true
+                            this.nodesDown.set(i , node)
+                            this.nodesDown.remove(i - 1)
+                            this.nodesDown.remove(i - 2)
+                            this.nodesDown.remove(i - 3)
+                            i := i - 3
+                            continue
+                    node.numberNode := 2
+                    this.nodesDown.set(i , node)
+                    break
+                if preNode.numberNode == 2
+                    node.indexPreNode := this.nodesDown.get(i - 2).indexPreNode
+                    node.lowPreNode := this.nodesDown.get(i - 2).lowPreNode
+                    node.isSymmetrySetup := this.nodesDown.get(i - 2).isSymmetrySetup or node.isSymmetrySetup
+                    node.numberNode   := 1
+                    this.nodesDown.set(i , node)
+                    this.nodesDown.remove(i - 1)
+                    this.nodesDown.remove(i - 2)
+                    i := i - 2
+                    continue
+        else if node.lowCorrection >= preNode.lowCorrection
+            if node.highNode > preNode.highNode
+                node.indexPreNode     := preNode.indexPreNode
+                node.indexNode        := preNode.indexNode
+                node.highNode         := preNode.highNode
+                node.lowPreNode       := preNode.lowPreNode
+                amountCorrection       = node.lowCorrection - node.highNode
+                node.amountCorrection := amountCorrection
+                if useLog
+                    node.log_amountCorrection := math.log(node.lowCorrection) - math.log(node.highNode)
+                node.numberNode       := preNode.numberNode
+                node.isSymmetrySetup := preNode.isSymmetrySetup or node.isSymmetrySetup
+                this.nodesDown.set(i , node)
+                this.nodesDown.remove(i - 1)
+                i := i - 1
+                continue
+            if node.highNode <= preNode.highNode
+                if preNode.numberNode == 1
+                    node.numberNode      := 1
+                    node.indexPreNode    := preNode.indexPreNode
+                    node.lowPreNode      := preNode.lowPreNode
+                    node.isSymmetrySetup := preNode.isSymmetrySetup or node.isSymmetrySetup
+                    this.nodesDown.set(i , node)
+                    this.nodesDown.remove(i - 1)
+                    i := i - 1
+                    continue
+                if preNode.numberNode == 2
+                    node.indexPreNode := this.nodesDown.get(i - 2).indexPreNode
+                    node.lowPreNode   := this.nodesDown.get(i - 2).lowPreNode
+                    node.isSymmetrySetup := this.nodesDown.get(i - 2).isSymmetrySetup or node.isSymmetrySetup
+                    node.numberNode   := 1
+                    this.nodesDown.set(i , node)
+                    this.nodesDown.remove(i - 1)
+                    this.nodesDown.remove(i - 2)
+                    i := i - 2
+                    continue
+
+method sortNodesUpTrend(series NDS this, bool useLog) =>
+    i = this.nodesUp.size() - 1
+    sw = false
+    if this.nodesUp.size() > 0
+        sw := true
+    while sw
+        node = this.nodesUp.get(i)
+        if this.nodesUp.size() <= 1
+            if node.lowCorrection <= node.lowPreNode
+                this.nodesUp.remove(0)
+            break
+        preNode = this.nodesUp.get(i - 1)
+        if node.lowCorrection > preNode.lowCorrection
+            if corrMag(node, useLog) < corrMag(preNode, useLog)
+                node.numberNode := 1
+                this.nodesUp.set(i , node)
+                break
+            if corrMag(node, useLog) >= corrMag(preNode, useLog)
+                if preNode.numberNode == 1
+                    if this.settings.swCalcSymmetry == true
+                        isSymmetry = this.calcSymmetryNodesUp(i, useLog)
+                        if isSymmetry
+                            prePrePreNode      = this.nodesUp.get(i - 3)
+                            node.indexPreNode := prePrePreNode.indexPreNode
+                            node.lowPreNode   := prePrePreNode.lowPreNode
+                            node.numberNode   := 1
+                            node.isSymmetrySetup := true
+                            this.nodesUp.set(i , node)
+                            this.nodesUp.remove(i - 1)
+                            this.nodesUp.remove(i - 2)
+                            this.nodesUp.remove(i - 3)
+                            i := i - 3
+                            continue
+                    node.numberNode := 2
+                    this.nodesUp.set(i , node)
+                    break
+                if preNode.numberNode == 2
+                    node.indexPreNode := this.nodesUp.get(i - 2).indexPreNode
+                    node.lowPreNode := this.nodesUp.get(i - 2).lowPreNode
+                    node.isSymmetrySetup := this.nodesUp.get(i - 2).isSymmetrySetup or node.isSymmetrySetup
+                    node.numberNode   := 1
+                    this.nodesUp.set(i , node)
+                    this.nodesUp.remove(i - 1)
+                    this.nodesUp.remove(i - 2)
+                    i := i - 2
+                    continue
+        else if node.lowCorrection <= preNode.lowCorrection
+            if node.highNode < preNode.highNode
+                node.indexPreNode     := preNode.indexPreNode
+                node.indexNode        := preNode.indexNode
+                node.highNode         := preNode.highNode
+                node.lowPreNode       := preNode.lowPreNode
+                node.amountCorrection := node.highNode - node.lowCorrection
+                if useLog
+                    node.log_amountCorrection := math.log(node.highNode) - math.log(node.lowCorrection)
+                node.numberNode       := preNode.numberNode
+                node.isSymmetrySetup := preNode.isSymmetrySetup or node.isSymmetrySetup
+                this.nodesUp.set(i , node)
+                this.nodesUp.remove(i - 1)
+                i := i - 1
+                continue
+            if node.highNode >= preNode.highNode
+                if preNode.numberNode == 1
+                    node.numberNode      := 1
+                    node.indexPreNode    := preNode.indexPreNode
+                    node.lowPreNode      := preNode.lowPreNode
+                    node.isSymmetrySetup := preNode.isSymmetrySetup or node.isSymmetrySetup
+                    this.nodesUp.set(i , node)
+                    this.nodesUp.remove(i - 1)
+                    i := i - 1
+                    continue
+                if preNode.numberNode == 2
+                    node.indexPreNode := this.nodesUp.get(i - 2).indexPreNode
+                    node.lowPreNode   := this.nodesUp.get(i - 2).lowPreNode
+                    node.isSymmetrySetup := this.nodesUp.get(i - 2).isSymmetrySetup or node.isSymmetrySetup
+                    node.numberNode   := 1
+                    this.nodesUp.set(i , node)
+                    this.nodesUp.remove(i - 1)
+                    this.nodesUp.remove(i - 2)
+                    i := i - 2
+                    continue
+
+//#endregion
+
+// ================================================================================================
+// بخش ۴: متدهای ایجاد و به‌روزرسانی گره‌ها
+// ================================================================================================
+//#region ———————————————————— NODE CREATION & UPDATE
+
+method SetNode_UpTrend(series NDS this) =>
+    numberNode       = 1
+    indexPreNode     = this.indexLowest_up
+    indexNode        = this.indexHighest_up
+    indexCorrection  = bar_index
+    lowPreNode       = this.priceLowest_up
+    highNode         = this.priceHighest_up
+    lowCorrection    = low[0]
+    amountCorrection = highNode - lowCorrection
+    log_amountCorrection = math.log(highNode) - math.log(lowCorrection)
+    Node node = Node.new(indexPreNode, indexNode, indexCorrection, numberNode, lowPreNode, highNode, lowCorrection, amountCorrection, log_amountCorrection, false)
+    this.nodesUp.push(node)
+
+    this.sortNodesUpTrend(this.settings.swCalcLogarithm)
+    this.priceHighest_up := low[0]
+    this.indexHighest_up := bar_index
+
+method SetNode_DownTrend(series NDS this) =>
+    numberNode       = 1
+    indexPreNode     = this.indexHighest_down
+    indexNode        = this.indexLowest_down
+    indexCorrection  = bar_index
+    lowPreNode       = this.priceHighest_down
+    highNode         = this.priceLowest_down
+    lowCorrection    = high[0]
+    amountCorrection = lowCorrection - highNode
+    log_amountCorrection = math.log(lowCorrection) - math.log(highNode)
+    Node node = Node.new(indexPreNode, indexNode, indexCorrection, numberNode, lowPreNode, highNode, lowCorrection, amountCorrection, log_amountCorrection, false)
+    this.nodesDown.push(node)
+
+    this.sortNodesDownTrend(this.settings.swCalcLogarithm)
+    this.priceLowest_down := high[0]
+    this.indexLowest_down := bar_index
+
+method CalcNode_UpTrend(series NDS this) =>
+    if low[0] < this.priceLowest_up
+        this.priceLowest_up := low[0]
+        this.indexLowest_up := bar_index
+    if high[0] > this.priceHighest_up
+        this.priceHighest_up := high[0]
+        this.indexHighest_up := bar_index
+
+    sizeNodes = this.nodesUp.size()
+    if sizeNodes > 0
+        node = this.nodesUp.last()
+        if low[0] <= node.lowCorrection
+            node.lowCorrection    := low[0]
+            node.indexCorrection  := bar_index
+            node.amountCorrection := node.highNode - node.lowCorrection
+            node.log_amountCorrection := math.log(node.highNode) - math.log(node.lowCorrection)
+            this.nodesUp.set(sizeNodes-1 , node)
+            this.sortNodesUpTrend(this.settings.swCalcLogarithm)
+        else if open[0] > close[0] and open[1] > close[1]
+            if high[0] >= node.highNode
+                node.highNode  := high[0]
+                node.indexNode := bar_index
+            if low[0] < low[1]
+                node.lowCorrection    := low[0]
+                node.indexCorrection  := bar_index
+            node.amountCorrection := node.highNode - node.lowCorrection
+            node.log_amountCorrection := math.log(node.highNode) - math.log(node.lowCorrection)
+            this.nodesUp.set(sizeNodes-1 , node)
+            this.sortNodesUpTrend(this.settings.swCalcLogarithm)
+            this.indexLowest_up     := this.nodesUp.last().indexCorrection
+            this.priceLowest_up     := low[bar_index - this.indexLowest_up]
+
+    isNode = false
+    if open[0] > close[0]
+        isNode := true
+    if isNode
+        sizeNodes := this.nodesUp.size()
+        if sizeNodes == 0
+            this.SetNode_UpTrend()
+        else if sizeNodes > 0
+            this.indexLowest_up     := this.nodesUp.last().indexCorrection
+            this.priceLowest_up     := low[bar_index - this.indexLowest_up]
+            this.SetNode_UpTrend()
+
+method CalcNode_DownTrend(series NDS this) =>
+    if low[0] < this.priceLowest_down
+        this.priceLowest_down := low[0]
+        this.indexLowest_down := bar_index
+    if high[0] > this.priceHighest_down
+        this.priceHighest_down := high[0]
+        this.indexHighest_down := bar_index
+
+    sizeNodes = this.nodesDown.size()
+    if sizeNodes > 0
+        node = this.nodesDown.last()
+        if high[0] >= node.lowCorrection
+            node.lowCorrection    := high[0]
+            node.indexCorrection  := bar_index
+            node.amountCorrection := node.lowCorrection - node.highNode
+            node.log_amountCorrection := math.log(node.lowCorrection) - math.log(node.highNode)
+            this.nodesDown.set(sizeNodes-1 , node)
+            this.sortNodesDownTrend(this.settings.swCalcLogarithm)
+        else if open[0] < close[0] and open[1] < close[1]
+            if low[0] <= node.highNode
+                node.highNode  := low[0]
+                node.indexNode := bar_index
+            node.lowCorrection    := high[0]
+            node.indexCorrection  := bar_index
+            node.amountCorrection := node.lowCorrection - node.highNode
+            node.log_amountCorrection := math.log(node.lowCorrection) - math.log(node.highNode)
+            this.nodesDown.set(sizeNodes-1 , node)
+            this.sortNodesDownTrend(this.settings.swCalcLogarithm)
+
+    isNode = false
+    if open[0] < close[0]
+        isNode := true
+    if isNode
+        sizeNodes := this.nodesDown.size()
+        if sizeNodes == 0
+            this.SetNode_DownTrend()
+        else if sizeNodes > 0
+            this.indexHighest_down     := this.nodesDown.last().indexCorrection
+            this.priceHighest_down     := high[bar_index - this.indexHighest_down]
+            this.SetNode_DownTrend()
+
+//#endregion
+
+// ================================================================================================
+// بخش ۵: متدهای رسم و نمایش
+// ================================================================================================
+//#region ———————————————————— DRAWING METHODS
+
+var g_labels = array.new<label>()
+var g_lines  = array.new<line>()
+var g_boxes  = array.new<box>()
+var g_polylines = array.new<polyline>()
+
+// Leave headroom under TradingView hard caps (500).
+// تارگت قیمتی همیشه از MAX-رزرو استفاده می‌کند (چه MAP روشن/خاموش) تا toggle تعدادشان را عوض نکند.
+MAX_DRAW_LINES   = 450
+MAX_DRAW_LABELS  = 450
+MAX_DRAW_BOXES   = 450
+MAX_DRAW_POLYLINES = 80
+MAX_HIT_LOOKBACK = 400
+MAX_ROUND_LEVELS = 40
+MAP_LINE_BUDGET  = 24
+MAP_LABEL_BUDGET = 24
+MAP_MAX_LOOKBACK = 490
+STAGGER_SCAN_CAP = 48
+INCOMPLETE2_CIRCLE_SEGMENTS = 24
+
+// Hit-check cache: build once per redraw, then O(1) per target
+var array<float> g_hitSufMaxHigh = array.new<float>()
+var array<float> g_hitSufMinLow = array.new<float>()
+var array<int> g_hitWin = array.from(0, -1)  // [start, end]
+
+prepareHitWindow(int hitGraceBars) =>
+    g_hitSufMaxHigh.clear()
+    g_hitSufMinLow.clear()
+    g_hitWin.set(0, 0)
+    g_hitWin.set(1, -1)
+    int lastCheckBar = bar_index - hitGraceBars - 1
+    if lastCheckBar >= 0
+        int fromBar = math.max(0, lastCheckBar - MAX_HIT_LOOKBACK + 1)
+        int n = lastCheckBar - fromBar + 1
+        if n > 0
+            g_hitWin.set(0, fromBar)
+            g_hitWin.set(1, lastCheckBar)
+            array<float> highs = array.new<float>(n)
+            array<float> lows = array.new<float>(n)
+            for i = 0 to n - 1
+                int off = bar_index - (fromBar + i)
+                highs.set(i, high[off])
+                lows.set(i, low[off])
+            float runMax = na
+            float runMin = na
+            array<float> sufMax = array.new<float>(n)
+            array<float> sufMin = array.new<float>(n)
+            for i = n - 1 to 0
+                float h = highs.get(i)
+                float l = lows.get(i)
+                runMax := na(runMax) ? h : math.max(runMax, h)
+                runMin := na(runMin) ? l : math.min(runMin, l)
+                sufMax.set(i, runMax)
+                sufMin.set(i, runMin)
+            for i = 0 to n - 1
+                g_hitSufMaxHigh.push(sufMax.get(i))
+                g_hitSufMinLow.push(sufMin.get(i))
+
+canDrawLine() =>
+    g_lines.size() < MAX_DRAW_LINES - MAP_LINE_BUDGET
+
+canDrawLabel() =>
+    g_labels.size() < MAX_DRAW_LABELS - MAP_LABEL_BUDGET
+
+canDrawBox() =>
+    g_boxes.size() < MAX_DRAW_BOXES
+
+canDrawPolyline() =>
+    g_polylines.size() < MAX_DRAW_POLYLINES
+
+canDrawMapLine() =>
+    g_lines.size() < MAX_DRAW_LINES
+
+canDrawMapLabel() =>
+    g_labels.size() < MAX_DRAW_LABELS
+
+trackLabel(label lbl) =>
+    if canDrawLabel()
+        g_labels.push(lbl)
+    else
+        label.delete(lbl)
+
+trackMapLabel(label lbl) =>
+    if canDrawMapLabel()
+        g_labels.push(lbl)
+    else
+        label.delete(lbl)
+
+trackLine(line ln) =>
+    if canDrawLine()
+        g_lines.push(ln)
+    else
+        line.delete(ln)
+
+trackMapLine(line ln) =>
+    if canDrawMapLine()
+        g_lines.push(ln)
+    else
+        line.delete(ln)
+
+trackBox(box b) =>
+    if canDrawBox()
+        g_boxes.push(b)
+    else
+        box.delete(b)
+
+trackPolyline(polyline p) =>
+    if canDrawPolyline()
+        g_polylines.push(p)
+    else
+        polyline.delete(p)
+
+
+clearDrawings() =>
+    while g_labels.size() > 0
+        label.delete(g_labels.pop())
+    while g_lines.size() > 0
+        line.delete(g_lines.pop())
+    while g_boxes.size() > 0
+        box.delete(g_boxes.pop())
+    while g_polylines.size() > 0
+        polyline.delete(g_polylines.pop())
+
+// Fast hit check using prebuilt suffix max/min (same result as old per-target loop)
+shouldDeleteHitTarget(float price, int startIdx, bool isUp, bool deleteHit, int hitGraceBars) =>
+    bool result = false
+    int winStart = g_hitWin.get(0)
+    int winEnd = g_hitWin.get(1)
+    if deleteHit and not na(price) and startIdx <= bar_index and winEnd >= winStart and g_hitSufMaxHigh.size() > 0
+        if winEnd >= startIdx
+            int fromBar = math.max(startIdx, winStart)
+            int idx = fromBar - winStart
+            if idx >= 0 and idx < g_hitSufMaxHigh.size()
+                result := isUp ? g_hitSufMaxHigh.get(idx) >= price : g_hitSufMinLow.get(idx) <= price
+    result
+
+// --- آرایه‌های جلوگیری از تداخل لیبل‌ها: صعود / نزول / سایر جدا هستند ---
+var g_stagUpPrice = array.new<float>()
+var g_stagUpX     = array.new<int>()
+var g_stagDnPrice = array.new<float>()
+var g_stagDnX     = array.new<int>()
+var g_stagOtPrice = array.new<float>()
+var g_stagOtX     = array.new<int>()
+
+// --- ورودی‌های تنظیم تداخل لیبل‌ها ---
+// ضابطه: نوشته از وسط بدنهٔ خط شروع می‌شود و فقط در صورت تداخل به راست می‌رود؛
+// هرگز به نوک خط نمی‌چسبد (جا برای خودِ متن با style_label_left می‌ماند).
+var GRP_LBL = "Target Label Anti-Overlap"
+targetLabelPriceTolerancePct = input.float(0.35, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_LBL, tooltip = 'فقط اگر دو لیبل هم‌مسیر قیمت نزدیک داشته باشند به راست جابه‌جا می‌شود')
+targetLabelStaggerStep = input.int(24, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'گام جابجایی از وسط به راست؛ فقط روی بدنهٔ خط، نه نوک خط')
+targetLabelYOffsetPct = input.float(0.01, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.01, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
+targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
+
+priceNearLabel(float a, float b) =>
+    refP = math.max(math.max(math.abs(a), math.abs(b)), 0.0000001)
+    math.abs(a - b) / refP * 100.0 <= targetLabelPriceTolerancePct
+
+// lane: 0 = صعود (H)، 1 = نزول (L)، 2 = سایر (سشن/MAP/Day)
+// ضابطهٔ چیدمان:
+// 1) شروع از وسط بدنهٔ خط
+// 2) فقط هم‌قیمت‌های نزدیک به راست می‌روند
+// 3) لنگر از ~۸۵٪ طول خط جلوتر نمی‌رود (متن label_left روی نوک خط نمی‌نشیند)
+getStaggerX(float price, int baseX, int lane, int lineEndX) =>
+    array<float> prices = lane == 0 ? g_stagUpPrice : lane == 1 ? g_stagDnPrice : g_stagOtPrice
+    array<int> xs = lane == 0 ? g_stagUpX : lane == 1 ? g_stagDnX : g_stagOtX
+    int lineLen = math.max(lineEndX - bar_index, 10)
+    int lo = math.max(baseX, bar_index + int(lineLen * 0.45))
+    int hi = bar_index + int(math.round(lineLen * 0.85))
+    hi := math.max(lo + 1, math.min(hi, lineEndX - 1))
+    int step = math.max(targetLabelStaggerStep, 4)
+    int span = math.max(hi - lo, step)
+
+    int slot = 0
+    int n = xs.size()
+    if n > 0
+        int from = math.max(0, n - STAGGER_SCAN_CAP)
+        for i = from to n - 1
+            if priceNearLabel(prices.get(i), price)
+                slot += 1
+
+    int x = lo + slot * step
+    if x > hi
+        // پر شد: داخل همان بازهٔ وسط→۸۵٪ بپاش، نه چسباندن به نوک ۱۰۰٪
+        x := lo + (slot * step) % span
+    x := math.min(math.max(x, lo), hi)
+    prices.push(price)
+    xs.push(x)
+    x
+
+resetLabelStagger() =>
+    g_stagUpPrice.clear()
+    g_stagUpX.clear()
+    g_stagDnPrice.clear()
+    g_stagDnX.clear()
+    g_stagOtPrice.clear()
+    g_stagOtX.clear()
+
+method initColor(series NDS this) =>
+    this.colors.push(Color.new(this.settings.c1))
+    this.colors.push(Color.new(this.settings.c2))
+    this.colors.push(Color.new(this.settings.c3))
+    this.colors.push(Color.new(this.settings.c4))
+    this.colors.push(Color.new(this.settings.c5))
+    this.colors.push(Color.new(this.settings.c6))
+    this.colors.push(Color.new(this.settings.c7))
+    this.colors.push(Color.new(this.settings.c8))
+
+textSizeFromString(string s) =>
+    switch s
+        'Auto'   => size.auto
+        'Huge'   => size.huge
+        'Large'  => size.large
+        'Normal' => size.normal
+        'Small'  => size.small
+        => size.tiny
+
+// نقطهٔ شروع نوشته = وسط طول خط (نه نوک خط)
+targetLabelBaseX(int gapBars) =>
+    int g = math.max(gapBars, 10)
+    int(bar_index + g / 2)
+
+// نوک خط افقی تارگت
+targetLabelMaxX(int gapBars) =>
+    bar_index + math.max(gapBars, 10)
+
+// Y لیبل کمی بالاتر از قیمت خط؛ دقیقاً بر اساس درصد تنظیم‌شده (گام ۰.۰۱)
+labelYAboveLine(float price) =>
+    price + math.abs(price) * targetLabelYOffsetPct / 100.0
+
+styleFromString(string s) =>
+    s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
+
+// lane: 0 صعود، 1 نزول، 2 سایر
+// خط با طول ثابت؛ نوشته روی بدنه از وسط به راست — نه چسبیده به انتهای خط
+drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars, int lane) =>
+    if not na(price) and canDrawLine()
+        int lineEnd = targetLabelMaxX(gapBars)
+        int baseX = targetLabelBaseX(gapBars)
+        int lblX = getStaggerX(price, baseX, lane, lineEnd)
+        trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(lineEnd, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
+        if canDrawLabel()
+            trackLabel(label.new(x = lblX, y = labelYAboveLine(price), text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
+
+// Node 2 ناقص: قله/کف نود ۲ هنوز به Min 1 نود ۱ نرسیده (مثل cTrader IsIncompleteNode2)
+isIncompleteNode2(array<Node> nodesRef, int i, bool swUptrendType) =>
+    bool result = false
+    if i > 0 and i < nodesRef.size()
+        Node n2 = nodesRef.get(i)
+        Node n1 = nodesRef.get(i - 1)
+        if n2.numberNode == 2 and n1.numberNode == 1
+            float moveSizeLog = math.abs(math.log(n1.highNode) - math.log(n1.lowPreNode))
+            float minPrice = swUptrendType ? math.exp(math.log(n1.lowCorrection) + moveSizeLog) : math.exp(math.log(n1.lowCorrection) - moveSizeLog)
+            if not na(minPrice)
+                result := swUptrendType ? n2.highNode < minPrice : n2.highNode > minPrice
+    result
+
+// دایره قرمز توپر روی محل تشکیل نود ۲ ناقص — شعاع قیمتی (%) و شعاع افقی (bars)
+drawIncompleteNode2DangerMarker(int barIdx, float price, float radiusPct, int radiusBars) =>
+    if canDrawPolyline() and not na(price) and not na(barIdx) and radiusPct > 0 and radiusBars > 0
+        float rPrice = math.abs(price) * radiusPct / 100.0
+        if rPrice > 0
+            array<chart.point> pts = array.new<chart.point>()
+            int segs = INCOMPLETE2_CIRCLE_SEGMENTS
+            for i = 0 to segs
+                float ang = i * 2.0 * math.pi / segs
+                int x = barIdx + int(math.round(radiusBars * math.cos(ang)))
+                float y = price + rPrice * math.sin(ang)
+                pts.push(chart.point.from_index(math.max(x, 0), y))
+            trackPolyline(polyline.new(pts, curved = true, closed = true, line_color = color.red, fill_color = color.new(color.red, 35), force_overlay = true))
+
+// نزدیکی دو قیمت بر حسب درصد
+pricesWithinTolPct(float a, float b, float tolPct) =>
+    not na(a) and not na(b) and math.abs(a) > 0 and (math.abs(a - b) / math.abs(a)) * 100.0 <= tolPct
+
+// نقطه سبز وقتی Min 1 و 0.85DOUBLE1 نزدیک‌اند
+drawMinDoubleProximityMarker(int barIdx, float price, string sizeStr) =>
+    if canDrawLabel() and not na(price)
+        if sizeStr == "Micro"
+            trackLabel(label.new(x = barIdx, y = price, text = "•", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.lime, size = size.tiny))
+        else if sizeStr == "Extra Tiny"
+            trackLabel(label.new(x = barIdx, y = price, text = "●", yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = color.lime, size = size.tiny))
+        else
+            trackLabel(label.new(x = barIdx, y = price, text = "", yloc = yloc.price, style = label.style_circle, color = color.lime, textcolor = color.lime, size = textSizeFromString(sizeStr)))
+
+method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, float incomplete2RadiusPct, int incomplete2RadiusBars) =>
+    array<Node> nodesRef = array.new<Node>()
+    var locText = yloc.belowbar
+    if swUptrendType
+        locText := yloc.abovebar
+        nodesRef := this.nodesUp
+    else
+        nodesRef := this.nodesDown
+
+    text_node_size_opt = this.settings.text_node_size
+    indexColor = 0
+    countNodes = nodesRef.size()
+    bool usePriceOffset = labelDistPct > 0.0
+
+    gapPrefix = ""
+    if extraGapLines > 0
+        for g = 1 to extraGapLines
+            gapPrefix := gapPrefix + "\n"
+
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            node = nodesRef.get(i)
+            index = node.indexNode
+            numberNode  = node.numberNode
+            textColor = this.colors.get(indexColor).labelColor
+            // Symmetry nodes display as single-star (*)
+            string baseText = str.tostring(numberNode) + suffix
+            string newText = baseText
+            if i > 0
+                if nodesRef.get(i - 1).indexNode == node.indexNode
+                    newText := '     ' + newText
+            if node.isSymmetrySetup
+                newText := gapPrefix + newText
+
+            shouldDraw = node.isSymmetrySetup ? showDoubleStarNodes : showRegularNodes
+            if shouldDraw and canDrawLabel()
+                float dist = usePriceOffset ? math.abs(node.highNode) * labelDistPct / 100.0 : 0.0
+                // صعود: بالای قله | نزول: پایین کف (highNode در نزول = کف حرکت)
+                float lblY = swUptrendType ? node.highNode + dist : node.highNode - dist
+                if usePriceOffset
+                    trackLabel(label.new(x = index, y = lblY, text = newText, yloc = yloc.price, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
+                else
+                    trackLabel(label.new(x = index, y = na, text = newText, yloc = locText, style = label.style_none, color = color.new(color.white, 100), textcolor = textColor, size = textSizeFromString(text_node_size_opt)))
+            if isIncompleteNode2(nodesRef, i, swUptrendType)
+                drawIncompleteNode2DangerMarker(index, node.highNode, incomplete2RadiusPct, incomplete2RadiusBars)
+
+            if i == countNodes - 1
+                break
+            nextNumberNode = nodesRef.get(i+1).numberNode
+            if nextNumberNode == 1
+                indexColor := indexColor + 1
+            if indexColor == 8
+                indexColor := 1
+
+method computeNodeColors(series NDS this, array<Node> nodesRef) =>
+    countNodes = nodesRef.size()
+    array<color> result = array.new<color>(countNodes)
+    indexColor = 0
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            result.set(i, this.colors.get(indexColor).labelColor)
+            if i == countNodes - 1
+                break
+            nextNumberNode = nodesRef.get(i+1).numberNode
+            if nextNumberNode == 1
+                indexColor := indexColor + 1
+            if indexColor == 8
+                indexColor := 1
+    result
+
+method drawingLineNodes(series NDS this) =>
+    lineWidth  = 2
+
+    sizeNodesUp = this.nodesUp.size()
+    if sizeNodesUp > 0
+        colorsUp = this.computeNodeColors(this.nodesUp)
+        for i= 0 to sizeNodesUp - 1
+            node = this.nodesUp.get(i)
+            lineColor = colorsUp.get(i)
+            firstPoint  = chart.point.from_index(node.indexPreNode ,node.lowPreNode)
+            secondPoint = chart.point.from_index(node.indexNode    ,node.highNode)
+            thirdPoint  = chart.point.from_index(node.indexCorrection ,node.lowCorrection)
+            trackLine(line.new(firstPoint, secondPoint ,color = lineColor  ,width = lineWidth ))
+            trackLine(line.new(secondPoint, thirdPoint ,color = lineColor ,width = lineWidth ))
+
+    sizeNodesDown = this.nodesDown.size()
+    if sizeNodesDown > 0
+        colorsDown = this.computeNodeColors(this.nodesDown)
+        for i= 0 to sizeNodesDown - 1
+            node = this.nodesDown.get(i)
+            lineColor = colorsDown.get(i)
+            firstPoint  = chart.point.from_index(node.indexPreNode ,node.lowPreNode)
+            secondPoint = chart.point.from_index(node.indexNode    ,node.highNode)
+            thirdPoint  = chart.point.from_index(node.indexCorrection ,node.lowCorrection)
+            trackLine(line.new(firstPoint, secondPoint ,color = lineColor  ,width = lineWidth ))
+            trackLine(line.new(secondPoint, thirdPoint ,color = lineColor ,width = lineWidth ))
+
+// ================================================================================================
+// نود ۱ بیس‌شده: اصلاح ≥ نسبت مشخصی از حرکت خودش (لگاریتمی)
+isBasedNode1(Node node, float basedRetraceRatio) =>
+    float moveLog = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
+    float corrLog = math.abs(math.log(node.highNode) - math.log(node.lowCorrection))
+    moveLog > 0 and corrLog >= moveLog * basedRetraceRatio
+
+// تارگت‌های نود ۱ (Double + 0.85DOUBLE1 + Min + 1.3MIN1 + Correction)
+// ================================================================================================
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio, float minDblProxTolPct, string proxMarkerSize) =>
+    array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
+    trendPrefix = swUptrendType ? "H " : "L "
+    int lane = swUptrendType ? 0 : 1
+    countNodes = nodesRef.size()
+
+    colorPerIndex = this.computeNodeColors(nodesRef)
+
+    array<bool> qualifies = array.new<bool>(countNodes)
+    qualifyingTotal = 0
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            node = nodesRef.get(i)
+            isQualified = node.numberNode == 1
+            qualifies.set(i, isQualified)
+            if isQualified
+                qualifyingTotal += 1
+
+    skipCount = math.max(qualifyingTotal - maxCount, 0)
+    seen = 0
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            if qualifies.get(i)
+                seen += 1
+                if seen > skipCount
+                    if not canDrawLine() or not canDrawLabel()
+                        break
+                    node = nodesRef.get(i)
+                    lineColor = colorPerIndex.get(i)
+                    moveSizeLog       = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
+                    correctionSizeLog = math.abs(math.log(node.highNode) - math.log(node.lowCorrection))
+
+                    if showDouble
+                        targetDoublePrice = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
+                        bool shouldDelete = shouldDeleteHitTarget(targetDoublePrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node.indexNode, targetDoublePrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 1", gapBars, lane)
+
+                    // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5DOUBLE1 و 0.85DOUBLE1 لازم نیستند
+                    bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
+                    bool node2Incomplete = hasNode2 and isIncompleteNode2(nodesRef, i + 1, swUptrendType)
+                    // نود ۲ هنوز کامل نشده: یا تشکیل نشده، یا ناقص است
+                    bool node2NotComplete = not hasNode2 or node2Incomplete
+
+                    if showDouble15 and not hasNode2
+                        targetDouble15Price = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog * double15Ratio) : math.exp(math.log(node.highNode) - moveSizeLog * double15Ratio)
+                        bool shouldDelete15 = shouldDeleteHitTarget(targetDouble15Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete15
+                            drawTargetLineLabel(node.indexNode, targetDouble15Price, lineColor, double15Width, double15Style, lineTransparency, trendPrefix + "1.5DOUBLE1", gapBars, lane)
+
+                    float proxMinPrice = na
+                    float proxDbl086Price = na
+
+                    if showDouble086 and not hasNode2
+                        float startNode1 = node.lowPreNode
+                        float doubleEnd = swUptrendType ? math.exp(math.log(node.highNode) + moveSizeLog) : math.exp(math.log(node.highNode) - moveSizeLog)
+                        targetDouble086Price = math.exp(math.log(startNode1) + double086Ratio * (math.log(doubleEnd) - math.log(startNode1)))
+                        proxDbl086Price := targetDouble086Price
+                        bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete086
+                            drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.85DOUBLE1", gapBars, lane)
+
+                    if showMin
+                        targetMinPrice = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog) : math.exp(math.log(node.lowCorrection) - moveSizeLog)
+                        proxMinPrice := targetMinPrice
+                        bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
+                        // فقط وقتی نود ۲ بعدی ناقص است؛ با کامل شدن نود ۲ دیگر رسم نمی‌شود
+                        if node2Incomplete
+                            float targetMin085Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * min085Ratio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * min085Ratio)
+                            bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                            if not shouldDelete085
+                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.85MIN1", gapBars, lane)
+
+                    // نقطه سبز وقتی Min 1 و 0.85DOUBLE1 نزدیک‌اند (هر دو برای همین نود ۱ بدون نود ۲)
+                    if pricesWithinTolPct(proxMinPrice, proxDbl086Price, minDblProxTolPct)
+                        float proxY = (proxMinPrice + proxDbl086Price) / 2.0
+                        drawMinDoubleProximityMarker(node.indexNode, proxY, proxMarkerSize)
+
+                    // نود ۱ بیس‌شده: اصلاح ≥ basedRetrace؛ تارگت basedMinExt×Min1 تا قبل از کامل شدن نود ۲
+                    if showBasedMin13 and isBasedNode1(node, basedRetraceRatio) and node2NotComplete
+                        float targetBasedMin13 = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog * basedMinExtRatio) : math.exp(math.log(node.lowCorrection) - moveSizeLog * basedMinExtRatio)
+                        bool shouldDeleteBased = shouldDeleteHitTarget(targetBasedMin13, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDeleteBased
+                            drawTargetLineLabel(node.indexNode, targetBasedMin13, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "1.3MIN1", gapBars, lane)
+
+                    if showCorrection
+                        targetCorrectionPrice = swUptrendType ? math.exp(math.log(node.highNode) + correctionSizeLog) : math.exp(math.log(node.highNode) - correctionSizeLog)
+                        bool shouldDelete = shouldDeleteHitTarget(targetCorrectionPrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 1", gapBars, lane)
+
+// ================================================================================================
+// تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
+// ================================================================================================
+method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, int node2Width, string node2Style, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency) =>
+    array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
+    trendPrefix = swUptrendType ? "H " : "L "
+    int lane = swUptrendType ? 0 : 1
+    countNodes = nodesRef.size()
+
+    colorPerIndex = this.computeNodeColors(nodesRef)
+
+    array<bool> qualifies = array.new<bool>(countNodes)
+    qualifyingTotal = 0
+    if countNodes > 0
+        for i = 0 to countNodes - 1
+            node = nodesRef.get(i)
+            isQualified = node.numberNode == 2
+            qualifies.set(i, isQualified)
+            if isQualified
+                qualifyingTotal += 1
+
+    skipCount = math.max(qualifyingTotal - maxCount, 0)
+    seen = 0
+    if countNodes > 0 and showNode2
+        for i = 0 to countNodes - 1
+            if qualifies.get(i)
+                seen += 1
+                if seen > skipCount
+                    if not canDrawLine() or not canDrawLabel()
+                        break
+                    node = nodesRef.get(i)
+                    lineColor = colorPerIndex.get(i)
+                    moveSizeLog2 = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
+                    targetNode2Price = swUptrendType ? math.exp(math.log(node.lowCorrection) + moveSizeLog2) : math.exp(math.log(node.lowCorrection) - moveSizeLog2)
+                    bool shouldDelete = shouldDeleteHitTarget(targetNode2Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                    if not shouldDelete
+                        drawTargetLineLabel(node.indexNode, targetNode2Price, lineColor, node2Width, node2Style, lineTransparency, trendPrefix + "Node 2", gapBars, lane)
+
+// ================================================================================================
+// تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
+// ================================================================================================
+method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMin, bool showMax, bool showDouble, bool showCorrection, int minWidth, int maxWidth, int doubleWidth, int correctionWidth, string minStyle, string maxStyle, string doubleStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency) =>
+    array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
+    trendPrefix = swUptrendType ? "H " : "L "
+    int lane = swUptrendType ? 0 : 1
+    countNodes = nodesRef.size()
+
+    colorPerIndex = this.computeNodeColors(nodesRef)
+
+    array<bool> isPairStart = array.new<bool>(countNodes)
+    pairTotal = 0
+    if countNodes > 1
+        for i = 0 to countNodes - 2
+            node1c = nodesRef.get(i)
+            node2c = nodesRef.get(i+1)
+            valid  = node1c.numberNode == 1 and node2c.numberNode == 2
+            isPairStart.set(i, valid)
+            if valid
+                pairTotal += 1
+
+    skipCount = math.max(pairTotal - maxCount, 0)
+    seen = 0
+    if countNodes > 1
+        for i = 0 to countNodes - 2
+            if isPairStart.get(i)
+                seen += 1
+                if seen > skipCount
+                    if not canDrawLine() or not canDrawLabel()
+                        break
+                    node1 = nodesRef.get(i)
+                    node2 = nodesRef.get(i+1)
+                    lineColor = colorPerIndex.get(i)
+                    totalMoveLog = math.abs(math.log(node2.highNode) - math.log(node1.lowPreNode))
+
+                    if showMin
+                        minPrice = swUptrendType ? math.exp(math.log(node1.lowCorrection) + totalMoveLog) : math.exp(math.log(node1.lowCorrection) - totalMoveLog)
+                        bool shouldDelete = shouldDeleteHitTarget(minPrice, node1.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node1.indexNode, minPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 12", gapBars, lane)
+
+                    if showMax
+                        maxPrice = swUptrendType ? math.exp(math.log(node2.lowCorrection) + totalMoveLog) : math.exp(math.log(node2.lowCorrection) - totalMoveLog)
+                        bool shouldDelete = shouldDeleteHitTarget(maxPrice, node2.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node2.indexNode, maxPrice, lineColor, maxWidth, maxStyle, lineTransparency, trendPrefix + "Max 12", gapBars, lane)
+
+                    if showDouble
+                        dblPrice = swUptrendType ? math.exp(math.log(node2.highNode) + totalMoveLog) : math.exp(math.log(node2.highNode) - totalMoveLog)
+                        bool shouldDelete = shouldDeleteHitTarget(dblPrice, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node2.indexNode, dblPrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 12", gapBars, lane)
+
+                    if showCorrection
+                        correctionSizeLog2 = math.abs(math.log(node2.highNode) - math.log(node2.lowCorrection))
+                        corrPrice12 = swUptrendType ? math.exp(math.log(node2.highNode) + correctionSizeLog2) : math.exp(math.log(node2.highNode) - correctionSizeLog2)
+                        bool shouldDelete = shouldDeleteHitTarget(corrPrice12, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDelete
+                            drawTargetLineLabel(node2.indexNode, corrPrice12, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 2", gapBars, lane)
+
+//#endregion
+
+// ================================================================================================
+// بخش ۵-ج: تارگت‌های قیمت رند (Round Number / Psychological Levels)
+// ================================================================================================
+//#region ———————————————————— ROUND NUMBER TARGETS
+
+drawRoundNumberTargets(float basePrice, bool isUp, int gapBars, bool deleteHit, int hitGraceBars, int lineWidth, string lineStyleStr, int lineTransparency, color lineColor, float minVisiblePrice, int historyBars, bool drawVisual) =>
+    if basePrice > 0
+        int lookback = math.min(historyBars, bar_index)
+        float chartLow  = lookback > 0 ? ta.lowest(low, lookback + 1) : low[0]
+        float chartHigh = lookback > 0 ? ta.highest(high, lookback + 1) : high[0]
+        float effectiveMin = minVisiblePrice > 0 ? math.max(minVisiblePrice, chartLow) : chartLow
+        float effectiveMax = chartHigh
+
+        int startMult = math.floor(effectiveMin / basePrice)
+        int endMult   = math.ceil(effectiveMax / basePrice)
+        if startMult < 1
+            startMult := 1
+
+        lnStyle = lineStyleStr == 'Solid' ? line.style_solid : lineStyleStr == 'Dashed' ? line.style_dashed : line.style_dotted
+        trendPrefix = isUp ? "H " : "L "
+        // مثل بقیه تارگت‌ها: خط از کندل جاری به جلو (نه به تاریخ گذشته)
+        int lineStartIdx = bar_index
+        int lineEndIdx = bar_index + gapBars
+
+        if endMult >= startMult
+            int totalLevels = endMult - startMult + 1
+            if totalLevels > MAX_ROUND_LEVELS
+                int mid = int((startMult + endMult) / 2)
+                int half = int(MAX_ROUND_LEVELS / 2)
+                startMult := math.max(1, mid - half)
+                endMult := startMult + MAX_ROUND_LEVELS - 1
+            for mult = startMult to endMult
+                if not canDrawLine() or not canDrawLabel()
+                    break
+                float roundPrice = basePrice * mult
+                int roundStartIdx = math.max(bar_index - lookback, 0)
+                bool shouldDelete = shouldDeleteHitTarget(roundPrice, roundStartIdx, isUp, deleteHit, hitGraceBars)
+
+                if not shouldDelete
+                    if drawVisual
+                        drawTargetLineLabel(lineStartIdx, roundPrice, lineColor, lineWidth, lineStyleStr, lineTransparency, trendPrefix + "RN " + str.tostring(roundPrice, "#.####"), gapBars, isUp ? 0 : 1)
+
+//#endregion
+
+//#region ———————————————————— INIT & ENGINE
+
+method initFirst(series NDS this) =>
+    if this.swFirst == true
+        this.initColor()
+        this.swFirst := false
+
+method calc(series NDS this) =>
+    min = last_bar_index - this.settings.startPoint
+    max = last_bar_index - this.settings.endPoint + 1
+
+    if bar_index > min and bar_index <= max and bar_index > 1
+        this.initFirst()
+        this.CalcNode_UpTrend()
+        this.CalcNode_DownTrend()
+
+newInstance(Settings settings) =>
+    NDS result = NDS.new(settings, array.new<Node>(), array.new<Node>(), array.new<Node>(), colors = array.new<Color>())
+    result
+
+//#endregion
+
+// ================================================================================================
+// بخش ۷: ورودی‌های کاربر
+// ================================================================================================
+//#region ———————————————————— INPUTS
+
+var GRP2 = "Nodal Calculation Settings"
+startPointInput = input.int(2000, 'Starting Point Candles', minval = 1 , maxval = 5000 , inline = "12", group = GRP2)
+endPointInput   = input.int(0, 'End Point (Final)', group = GRP2, minval = 0 , maxval = 5000)
+
+var GRP1 = "Strategy Config"
+swCalcLogarithm = input.bool(true, 'Calc Nodes with Logarithm' , group = GRP1, tooltip = 'فقط روی محاسبه‌ی خودِ نودها و سیمتری اثر دارد. تارگت‌ها همیشه بر حسب لگاریتم محاسبه می‌شوند.')
+nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'Starred = فقط موتور سیمتری (cNodeSym). Starless = فقط موتور بدون سیمتری (cNodeNoSym). هم‌زمان اجرا نمی‌شوند.')
+verticalGapInput = input.int(0, 'Vertical Gap: Symmetry vs No-Symmetry (lines)', minval = 0, maxval = 15, group = GRP1, tooltip = "تعداد خط خالی فاصله عمودی بین عدد ستاره‌دار (سیمتری) و عدد بدون ستاره")
+showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', group = GRP1)
+showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
+
+var GRP5 = "Node Targets — Master Switches"
+enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double + 1.5DOUBLE1 + 0.85DOUBLE1 + Min + 1.3MIN1 + Correction)', group = GRP5)
+enableSingleNode2Targets = input.bool(false, 'Show Node 2 Target (move size from Node2 correction end)', group = GRP5, tooltip = 'اندازه حرکت نود ۲ از انتهای اصلاح همان نود، در جهت نود ۲')
+enablePairNode12Targets  = input.bool(true, 'Show Node 1+2 Pair Targets (Min + Max + Double + Correction)', group = GRP5)
+showTargetNode1Up   = input.bool(true, 'Apply to Up Trend', inline = "trend1", group = GRP5)
+showTargetNode1Down = input.bool(true, 'Apply to Down Trend', inline = "trend1", group = GRP5)
+targetLabelGapBars = input.int(200, 'Target Line Length (bars into future)', minval = 3, maxval = 490, group = GRP5, tooltip = 'طول خط افقی تارگت. نوشته از وسط همین خط شروع می‌شود و فقط در تداخل به راست می‌رود؛ به نوک خط نمی‌چسبد.')
+deleteHitTargets = input.bool(true, 'Delete Hit Targets (auto-remove when price reaches target)', group = GRP5)
+
+hitGraceBarsInput = input.int(2, 'Hit Target Grace Period (bars)', minval = 0, maxval = 500, group = GRP5, tooltip = 'تارگت‌هایی که قیمت به آنها رسیده باشد، حداقل به مدت این تعداد کندل دیگر نمایش داده می‌شوند و سپس حذف می‌شوند')
+targetLineTransparency = input.int(60, 'Target Lines Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP5)
+
+var GRP10 = "Round Number Targets (Psychological Levels)"
+enableRoundTargets      = input.bool(false, 'Show Round Number Targets', group = GRP10)
+roundBasePrice          = input.float(10.0, 'Round Number Base Price', minval = 0.0001, step = 0.1, group = GRP10)
+roundApplyUp            = input.bool(true, 'Apply Round Numbers to Up Trend', inline = 'rnd1', group = GRP10)
+roundApplyDown          = input.bool(true, 'Apply Round Numbers to Down Trend', inline = 'rnd1', group = GRP10)
+// Round targets are never auto-deleted on hit
+roundDeleteHit          = false
+roundHitGraceBars       = 0
+roundLineWidth          = input.int(1, 'Round Number Line Width', minval = 1, maxval = 4, group = GRP10)
+roundLineStyle          = input.string('Dotted', 'Round Number Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP10)
+roundLineTransparency   = input.int(60, 'Round Number Line Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP10)
+roundLineColor          = input.color(color.new(color.gray, 30), 'Round Number Line Color', group = GRP10)
+roundMinVisiblePrice    = input.float(3000.0, 'Round Min Visible Price (0=auto)', minval = 0.0, group = GRP10)
+
+var GRP6 = "Node 1 Targets (Single)"
+showTargetDoubleInput     = input.bool(true, 'Show Target Double (100% from node peak)', group = GRP6)
+showTargetDouble15Input   = input.bool(true, 'Show Target 1.5DOUBLE1 (150% from node peak)', group = GRP6, tooltip = 'همان Double نود ۱ با نسبت ۱.۵ از قله؛ وقتی نود ۲ تشکیل شود خودکار حذف می‌شود')
+double15Ratio             = input.float(1.5, '1.5DOUBLE1 Ratio', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب حرکت از قله نود ۱؛ پیش‌فرض ۱.۵ (= ۱۵۰٪)')
+showTargetDouble086Input  = input.bool(true, 'Show Target 0.85DOUBLE1 (start→Double)', group = GRP6, tooltip = 'از ابتدای نود ۱ تا تارگت Double با نسبت ۰.۸۵؛ وقتی نود ۲ برای همان نود ۱ تشکیل شود خودکار حذف می‌شود')
+double086Ratio            = input.float(0.85, '0.85DOUBLE1 Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۵')
+showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
+min085Ratio               = input.float(0.85, '0.85MIN1 Ratio (incomplete Node 2)', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'فقط وقتی نود ۲ ناقص است کنار Min 1 رسم می‌شود؛ با کامل شدن نود ۲ حذف می‌شود')
+showTargetBasedMin13Input = input.bool(true, 'Show 1.3MIN1 (Based Node 1)', group = GRP6, tooltip = 'فقط برای نود ۱ بیس‌شده (اصلاح ≥ Based Retrace). تا قبل از کامل شدن نود ۲ می‌ماند')
+basedRetraceRatio         = input.float(0.85, 'Based Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نود ۱ بیس می‌شود اگر اصلاح لگاریتمی‌اش به این نسبت از حرکت خودش برسد؛ پیش‌فرض ۰.۸۵')
+basedMinExtRatio          = input.float(1.3, 'Based Min Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.3MIN1 روی نود ۱ بیس‌شده؛ پیش‌فرض ۱.۳')
+minDblProximityTolPct     = input.float(0.15, 'Min1 ↔ 0.85DOUBLE1 Proximity Tolerance (%)', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'اگر فاصلهٔ نسبی Min 1 و 0.85DOUBLE1 کمتر/مساوی این درصد باشد، نقطه سبز در محل تارگت گذاشته می‌شود')
+minDblProximityMarkerSize = input.string('Tiny', 'Proximity Green Dot Size', options = ['Huge', 'Large', 'Normal', 'Small', 'Tiny', 'Extra Tiny', 'Micro'], group = GRP6, tooltip = 'سایز نقطه سبز نزدیکی Min 1 و 0.85DOUBLE1')
+showTargetCorrectionInput = input.bool(true, 'Show Target Correction (from node peak, correction size)', group = GRP6)
+targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDouble15Width   = input.int(1, 'Target 1.5DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDouble086Width  = input.int(1, 'Target 0.85DOUBLE1 Line Width', minval = 1, maxval = 4, group = GRP6)
+targetMinWidth        = input.int(1, 'Target Min Line Width', minval = 1, maxval = 4, group = GRP6)
+targetCorrectionWidth = input.int(1, 'Target Correction Line Width', minval = 1, maxval = 4, group = GRP6)
+targetDoubleStyle     = input.string('Dotted', 'Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble15Style   = input.string('Dotted', 'Target 1.5DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetDouble086Style  = input.string('Dotted', 'Target 0.85DOUBLE1 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetMinStyle        = input.string('Dotted', 'Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetCorrectionStyle = input.string('Dotted', 'Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6)
+targetNode1MaxCount = input.int(30, 'Number of Last Nodes to Target', minval = 1, maxval = 100, group = GRP6)
+
+var GRP6B = "Node 2 Target (Single)"
+showTargetNode2Input = input.bool(false, 'Show Target Node 2 (move from correction end)', group = GRP6B, tooltip = 'اندازه حرکت نود ۲ را بگیر؛ از انتهای اصلاح نود ۲ به اندازه همان حرکت در جهت نود ۲ برو')
+targetNode2Width = input.int(1, 'Target Node 2 Line Width', minval = 1, maxval = 4, group = GRP6B)
+targetNode2Style = input.string('Dotted', 'Target Node 2 Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP6B)
+targetNode2MaxCount = input.int(30, 'Number of Last Node 2 to Target', minval = 1, maxval = 100, group = GRP6B)
+
+var GRP7 = "Node 1+2 Pair Targets (Min / Max / Double / Correction)"
+showPairMinInput    = input.bool(true, 'Show Target Min (from Node1 correction end)', group = GRP7)
+showPairMaxInput    = input.bool(true, 'Show Target Max (from Node2 correction end)', group = GRP7)
+showPairDoubleInput = input.bool(true, 'Show Target Double (from Node2 own peak)', group = GRP7)
+showPairCorrectionInput = input.bool(true, 'Show Target Correction (from Node2 peak, Node2 own correction size)', group = GRP7)
+pairMinWidth    = input.int(1, 'Pair Target Min Line Width', minval = 1, maxval = 4, group = GRP7)
+pairMaxWidth    = input.int(1, 'Pair Target Max Line Width', minval = 1, maxval = 4, group = GRP7)
+pairDoubleWidth = input.int(1, 'Pair Target Double Line Width', minval = 1, maxval = 4, group = GRP7)
+pairCorrectionWidth = input.int(1, 'Pair Target Correction Line Width', minval = 1, maxval = 4, group = GRP7)
+pairMinStyle    = input.string('Dotted', 'Pair Target Min Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairMaxStyle    = input.string('Dotted', 'Pair Target Max Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairDoubleStyle = input.string('Dotted', 'Pair Target Double Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairCorrectionStyle = input.string('Dotted', 'Pair Target Correction Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP7)
+pairTargetMaxCount = input.int(30, 'Number of Last Pairs to Target', minval = 1, maxval = 100, group = GRP7)
+
+var GRP3 = "Visual Customization"
+text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
+text_node_size_nosym = input.string('Small', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
+nodeLabelDistPct = input.float(0.0, 'Node 1/2 Label Distance from Candle (%)', minval = 0.0, maxval = 10.0, step = 0.01, group = GRP3, tooltip = 'فاصلهٔ عمودی عدد ۱ و ۲ از قله/کف کندل نود. یک مقدار برای صعود و نزول هم‌زمان اعمال می‌شود. ۰ = چسبیده به کندل')
+incompleteNode2RadiusPct = input.float(0.08, 'Incomplete Node 2 Circle Radius (%)', minval = 0.001, maxval = 5.0, step = 0.001, group = GRP3, tooltip = 'شعاع عمودی دایره قرمز نسبت به قیمت محل تشکیل نود ۲ ناقص')
+incompleteNode2RadiusBars = input.int(3, 'Incomplete Node 2 Circle Radius (Bars)', minval = 1, maxval = 50, group = GRP3, tooltip = 'شعاع افقی دایره قرمز بر حسب تعداد کندل')
+c1 = input.color(defval = color.white, inline = "13", group = GRP3)
+c2 = input.color(defval = color.yellow, inline = "13", group = GRP3)
+c3 = input.color(defval = color.aqua, inline = "13", group = GRP3)
+c4 = input.color(defval = color.lime, inline = "13", group = GRP3)
+c5 = input.color(defval = color.orange, inline = "14", group = GRP3)
+c6 = input.color(defval = color.fuchsia, inline = "14", group = GRP3)
+c7 = input.color(defval = color.blue, inline = "14", group = GRP3)
+c8 = input.color(defval = color.red, inline = "14", group = GRP3)
+
+var GRP4 = "No-Symmetry Colors (offset set)"
+n1 = input.color(defval = color.white, inline = "15", group = GRP4)
+n2 = input.color(defval = color.yellow, inline = "15", group = GRP4)
+n3 = input.color(defval = color.aqua, inline = "15", group = GRP4)
+n4 = input.color(defval = color.lime, inline = "15", group = GRP4)
+n5 = input.color(defval = color.orange, inline = "16", group = GRP4)
+n6 = input.color(defval = color.fuchsia, inline = "16", group = GRP4)
+n7 = input.color(defval = color.blue, inline = "16", group = GRP4)
+n8 = input.color(defval = color.red, inline = "16", group = GRP4)
+
+//#endregion
+
+// ================================================================================================
+// بخش ۸: اجرای اصلی و نمایش نهایی
+// ================================================================================================
+//#region ———————————————————— EXECUTION
+
+
+var Settings settingsSym = Settings.new(
+     startPointInput, endPointInput,
+     true,
+     swCalcLogarithm,
+     text_node_size_sym,
+     c1, c2, c3, c4, c5, c6, c7, c8,
+     true
+ )
+
+var Settings settingsNoSym = Settings.new(
+     startPointInput, endPointInput,
+     false,
+     swCalcLogarithm,
+     text_node_size_nosym,
+     n1, n2, n3, n4, n5, n6, n7, n8,
+     true
+ )
+
+var NDS cNodeSym   = newInstance(settingsSym)
+var NDS cNodeNoSym = newInstance(settingsNoSym)
+
+// فقط یک موتور در هر لحظه — پیش‌فرض Starred = cNodeSym
+if nodeDisplayMode == 'Starred'
+    cNodeSym.calc()
+else
+    cNodeNoSym.calc()
+
+method countStarlessNode1(series NDS this, bool swUptrendType) =>
+    array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
+    cnt = 0
+    if nodesRef.size() > 0
+        for i = 0 to nodesRef.size() - 1
+            n = nodesRef.get(i)
+            if n.numberNode == 1 and not n.isSymmetrySetup
+                cnt += 1
+    cnt
+
+// رسم تارگت‌ها به بعد از تعریف MAP منتقل شد تا MAP اول رسم شود
+
+//#endregion
+
+// ================================================================================================
+// بخش ب: موتور Sessions (سشن‌های معاملاتی + رنج‌ها + خط اپن/کلوز روزانه)
+// ================================================================================================
+//------------------------------------------------------------------------------
+//Settings
+//-----------------------------------------------------------------------------{
+// === تغییر ۱: ورودی تعداد روزهای نمایش سشن ===
+sessionDisplayDays = input.int(2, 'Session Display Days', minval = 1, maxval = 10, group = 'Session Display', tooltip = 'تعداد روزهایی که سشن‌ها نمایش داده می‌شوند. مثلاً ۲ یعنی امروز و دیروز. فقط باکس Range، خط مرزی و Midline محدود می‌شوند.')
+
+//Session A
+show_sesa = input.bool(false, '', inline = 'sesa', group = 'Session A')
+sesa_txt = input.string('New York', '', inline = 'sesa', group = 'Session A')
+sesa_ses = input.session('1300-2200', '', inline = 'sesa', group = 'Session A')
+sesa_css = input.color(#ff5d00, '', inline = 'sesa', group = 'Session A')
+
+sesa_range = input.bool(true, 'Range', inline = 'sesa_overlays', group = 'Session A')
+sesa_tl = input.bool(false, 'Trendline', inline = 'sesa_overlays', group = 'Session A')
+sesa_avg = input.bool(false, 'Mean', inline = 'sesa_overlays', group = 'Session A')
+sesa_vwap = input.bool(false, 'VWAP', inline = 'sesa_overlays', group = 'Session A')
+sesa_maxmin = input.bool(false, 'Max/Min', inline = 'sesa_overlays', group = 'Session A')
+sesa_midline = input.bool(true, 'Middle Line', inline = 'sesa_overlays', group = 'Session A')
+sesa_midline_length = input.int(10, 'Middle Line Extension (Bars)', minval=0, group = 'Session A')
+
+//Session B
+show_sesb = input.bool(false, '', inline = 'sesb', group = 'Session B')
+sesb_txt = input.string('London', '', inline = 'sesb', group = 'Session B')
+sesb_ses = input.session('0700-1530', '', inline = 'sesb', group = 'Session B')
+sesb_css = input.color(#2157f3, '', inline = 'sesb', group = 'Session B')
+
+sesb_range = input.bool(true, 'Range', inline = 'sesb_overlays', group = 'Session B')
+sesb_tl = input.bool(false, 'Trendline', inline = 'sesb_overlays', group = 'Session B')
+sesb_avg = input.bool(false, 'Mean', inline = 'sesb_overlays', group = 'Session B')
+sesb_vwap = input.bool(false, 'VWAP', inline = 'sesb_overlays', group = 'Session B')
+sesb_maxmin = input.bool(false, 'Max/Min', inline = 'sesb_overlays', group = 'Session B')
+sesb_midline = input.bool(true, 'Middle Line', inline = 'sesb_overlays', group = 'Session B')
+sesb_midline_length = input.int(10, 'Middle Line Extension (Bars)', minval=0, group = 'Session B')
+
+//Session C
+show_sesc = input.bool(true, '', inline = 'sesc', group = 'Session C')
+sesc_txt = input.string('Tokyo', '', inline = 'sesc', group = 'Session C')
+sesc_ses = input.session('0000-0600', '', inline = 'sesc', group = 'Session C')
+sesc_css = input.color(#ffeb3b, '', inline = 'sesc', group = 'Session C')
+
+sesc_range = input.bool(true, 'Range', inline = 'sesc_overlays', group = 'Session C')
+sesc_tl = input.bool(false, 'Trendline', inline = 'sesc_overlays', group = 'Session C')
+sesc_avg = input.bool(true, 'Mean', inline = 'sesc_overlays', group = 'Session C')
+sesc_vwap = input.bool(false, 'VWAP', inline = 'sesc_overlays', group = 'Session C')
+sesc_maxmin = input.bool(false, 'Max/Min', inline = 'sesc_overlays', group = 'Session C')
+sesc_midline = input.bool(true, 'Middle Line', inline = 'sesc_overlays', group = 'Session C')
+sesc_midline_length = input.int(100, 'Middle Line Extension (Bars)', minval=0, group = 'Session C')
+
+//Session D
+show_sesd = input.bool(false, '', inline = 'sesd', group = 'Session D')
+sesd_txt = input.string('Sydney', '', inline = 'sesd', group = 'Session D')
+sesd_ses = input.session('2100-0600', '', inline = 'sesd', group = 'Session D')
+sesd_css = input.color(#ffeb3b, '', inline = 'sesd', group = 'Session D')
+
+sesd_range = input.bool(true, 'Range', inline = 'sesd_overlays', group = 'Session D')
+sesd_tl = input.bool(false, 'Trendline', inline = 'sesd_overlays', group = 'Session D')
+sesd_avg = input.bool(false, 'Mean', inline = 'sesd_overlays', group = 'Session D')
+sesd_vwap = input.bool(false, 'VWAP', inline = 'sesd_overlays', group = 'Session D')
+sesd_maxmin = input.bool(false, 'Max/Min', inline = 'sesd_overlays', group = 'Session D')
+sesd_midline = input.bool(true, 'Middle Line', inline = 'sesd_overlays', group = 'Session D')
+sesd_midline_length = input.int(10, 'Middle Line Extension (Bars)', minval=0, group = 'Session D')
+
+//Timezones
+tz_incr = input.int(0, 'UTC (+/-)', group = 'Timezone')
+use_exchange = input.bool(false, 'Use Exchange Timezone', group = 'Timezone')
+
+//Ranges Options
+bg_transp = input.float(90, 'Range Area Transparency', group = 'Ranges Settings')
+show_outline = input.bool(true, 'Range Outline', group = 'Ranges Settings')
+outline_width = input.int(1, 'Outline Width', minval=1, maxval=5, group = 'Ranges Settings')
+outline_style = input.string(line.style_dotted, "Outline Style", options = [line.style_solid, line.style_dashed, line.style_dotted], group = 'Ranges Settings')
+outline_transp = input.int(0, 'Outline Transparency', minval=0, maxval=100, group = 'Ranges Settings')
+show_txt = input.bool(true, 'Range Label', group = 'Ranges Settings')
+midline_style = input.string(line.style_dashed, "Middle Line Style", options = [line.style_solid, line.style_dashed, line.style_dotted], group = 'Ranges Settings')
+midline_width = input.int(1, 'Middle Line Width', minval=1, maxval=5, group = 'Ranges Settings')
+midline_transp = input.int(0, 'Middle Line Transparency', minval=0, maxval=100, group = 'Ranges Settings')
+
+// Session target line settings
+var GRP_SESTGT = "Session Targets"
+enableSessionTargets = input.bool(true, 'Show Session High/Low/Midline as Targets', group = GRP_SESTGT, tooltip = 'سقف، کف و میدلاین هر سشن به‌عنوان تارگت رسم می‌شود')
+applySessionHigh = input.bool(true, 'Include Session High (Top)', inline = 'sestgt1', group = GRP_SESTGT)
+applySessionLow  = input.bool(true, 'Include Session Low (Bottom)', inline = 'sestgt1', group = GRP_SESTGT)
+applySessionMid  = input.bool(true, 'Include Session Midline', inline = 'sestgt1', group = GRP_SESTGT)
+sessionHighLineWidth = input.int(1, 'Session High Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
+sessionLowLineWidth  = input.int(1, 'Session Low Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
+sessionMidLineWidth  = input.int(1, 'Session Mid Line Width', minval = 1, maxval = 4, inline = 'sestgt_w', group = GRP_SESTGT)
+sessionTargetLineStyle  = input.string('Dotted', 'Session Target Line Style', options = ['Solid', 'Dashed', 'Dotted'], group = GRP_SESTGT)
+sessionTargetLineTransparency = input.int(60, 'Session Target Line Transparency (0=Opaque, 100=Invisible)', minval = 0, maxval = 100, group = GRP_SESTGT)
+
+//-----------------------------------------------------------------------------}
+//Functions
+//-----------------------------------------------------------------------------{
+nBar = bar_index
+
+//Get session average
+get_avg(session)=>
+    var len = 1
+    var float csma = na
+    var float sma = na
+
+    if session > session[1]
+        len := 1
+        csma := close
+    
+    if session != 0 and session == session[1]
+        len += 1    
+        csma += close
+        sma := csma / len
+    
+    sma
+
+//Get trendline coordinates
+get_linreg(session)=>
+    var len = 1
+    var float cwma  = na
+    var float csma  = na
+    var float csma2 = na
+
+    var float y1 = na
+    var float y2 = na
+    var float stdev = na 
+    var float r2    = na 
+
+    if session > session[1]
+        len   := 1
+        cwma  := close
+        csma  := close
+        csma2 := close * close
+    
+    if session != 0 and session == session[1]
+        len   += 1    
+        csma  += close
+        csma2 += close * close
+        cwma  += close * len
+
+        sma = csma / len
+        wma = cwma / (len * (len + 1) / 2)
+
+        cov   = (wma - sma) * (len+1)/2
+        stdev := math.sqrt(csma2 / len - sma * sma)
+        r2    := cov / (stdev * (math.sqrt(len*len - 1) / (2 * math.sqrt(3))))
+
+        y1 := 4 * sma - 3 * wma
+        y2 := 3 * wma - 2 * sma
+
+    [y1 , y2, stdev, r2]
+
+//Set line
+set_line(session, y1, y2, session_css)=>
+    var line tl = na
+
+    if session > session[1]
+        tl := line.new(nBar, close, nBar, close, color = session_css)
+
+    if session != 0 and session == session[1]
+        line.set_y1(tl, y1)
+        line.set_xy2(tl, nBar, y2)
+
+// === تغییر ۱: get_range — نمایش فقط N سشن اخیر ===
+// extendMidToLast: برای آسیا (Tokyo) خط Mid و همچنین High/Low تا بار جاری ادامه می‌یابند
+get_range(session, session_name, session_css, show_midline, midline_length, displayDays, extendMidToLast)=>
+    var t = 0 
+    var max = high
+    var min = low
+    var box bx = na
+    var label lbl = na 
+    var line mid_line = na
+    var line high_line = na
+    var line low_line = na
+    var int start_bar = na
+    var int end_bar = na
+    
+    var array<box>   boxHistory = array.new<box>()
+    var array<label> lblHistory = array.new<label>()
+    var array<line>  midHistory = array.new<line>()
+    var array<line>  highHistory = array.new<line>()
+    var array<line>  lowHistory = array.new<line>()
+
+    if session > session[1]
+        t := time
+        max := high
+        min := low
+        start_bar := nBar
+
+        border_color_transparent = color.new(session_css, outline_transp)
+        
+        bx := box.new(nBar, max, nBar, min
+          , bgcolor = color.new(session_css, bg_transp)
+          , border_color = show_outline and not extendMidToLast ? border_color_transparent : na
+          , border_width = outline_width
+          , border_style = outline_style
+          )
+        boxHistory.push(bx)
+
+        if show_midline
+            midline_color_transparent = color.new(session_css, midline_transp)
+            mid_line := line.new(
+                 start_bar, (max + min) / 2, 
+                 nBar, (max + min) / 2, 
+                 color = midline_color_transparent, 
+                 style = line.style_dotted,
+                 width = midline_width
+             )
+            midHistory.push(mid_line)
+
+        // آسیا: خط سقف/کف جدا مثل Mid تا انتهای سشن و بعد از آن ادامه یابد
+        if extendMidToLast
+            hl_color = color.new(session_css, outline_transp)
+            high_line := line.new(start_bar, max, nBar, max, color = hl_color, style = outline_style, width = outline_width)
+            low_line := line.new(start_bar, min, nBar, min, color = hl_color, style = outline_style, width = outline_width)
+            highHistory.push(high_line)
+            lowHistory.push(low_line)
+
+        if show_txt
+            lbl := label.new(t, max, session_name
+              , xloc = xloc.bar_time
+              , textcolor = session_css
+              , style = label.style_label_down
+              , color = color.new(color.white, 100)
+              , size = size.tiny)
+            lblHistory.push(lbl)
+        
+        while boxHistory.size() > displayDays
+            oldBox = boxHistory.shift()
+            box.delete(oldBox)
+        while lblHistory.size() > displayDays
+            oldLbl = lblHistory.shift()
+            label.delete(oldLbl)
+        while midHistory.size() > displayDays
+            oldMid = midHistory.shift()
+            line.delete(oldMid)
+        while highHistory.size() > displayDays
+            oldHi = highHistory.shift()
+            line.delete(oldHi)
+        while lowHistory.size() > displayDays
+            oldLo = lowHistory.shift()
+            line.delete(oldLo)
+
+    if session != 0 and session == session[1]
+        max := math.max(high, max)
+        min := math.min(low, min)
+        end_bar := nBar
+
+        if not na(bx)
+            box.set_top(bx, max)
+            box.set_rightbottom(bx, nBar, min)
+
+        if show_midline and not na(mid_line) and not na(start_bar)
+            line.set_xy1(mid_line, start_bar, (max + min) / 2)
+            line.set_xy2(mid_line, end_bar + midline_length, (max + min) / 2)
+
+        if extendMidToLast and not na(start_bar)
+            int hlEnd = end_bar + midline_length
+            if not na(high_line)
+                line.set_xy1(high_line, start_bar, max)
+                line.set_xy2(high_line, hlEnd, max)
+            if not na(low_line)
+                line.set_xy1(low_line, start_bar, min)
+                line.set_xy2(low_line, hlEnd, min)
+    
+        if show_txt and not na(lbl)
+            label.set_xy(lbl, int(math.avg(t, time)), max)
+    
+    if extendMidToLast and session == 0 and not na(start_bar)
+        if show_midline and not na(mid_line)
+            line.set_xy2(mid_line, nBar, (max + min) / 2)
+        if not na(high_line)
+            line.set_xy1(high_line, start_bar, max)
+            line.set_xy2(high_line, nBar, max)
+        if not na(low_line)
+            line.set_xy1(low_line, start_bar, min)
+            line.set_xy2(low_line, nBar, min)
+    
+    [session != 0 ? na : max, session != 0 ? na : min, max, min]
+//-----------------------------------------------------------------------------}
+//Sessions
+//-----------------------------------------------------------------------------{
+tf = timeframe.period
+
+var tz = use_exchange ? syminfo.timezone :
+  str.format('UTC{0}{1}', tz_incr >= 0 ? '+' : '-', math.abs(tz_incr))
+
+is_sesa = math.sign(nz(time(tf, sesa_ses, tz)))
+is_sesb = math.sign(nz(time(tf, sesb_ses, tz)))
+is_sesc = math.sign(nz(time(tf, sesc_ses, tz)))
+is_sesd = math.sign(nz(time(tf, sesd_ses, tz)))
+
+//-----------------------------------------------------------------------------}
+//Overlays
+//-----------------------------------------------------------------------------{
+var float max_sesa = na
+var float min_sesa = na
+var float max_sesb = na
+var float min_sesb = na
+var float max_sesc = na
+var float min_sesc = na
+var float max_sesd = na
+var float min_sesd = na
+
+var float curmax_sesa = na
+var float curmin_sesa = na
+var float curmax_sesb = na
+var float curmin_sesb = na
+var float curmax_sesc = na
+var float curmin_sesc = na
+var float curmax_sesd = na
+var float curmin_sesd = na
+
+if show_sesa and sesa_range
+    [max, min, curmax, curmin] = get_range(is_sesa, sesa_txt, sesa_css, sesa_midline, sesa_midline_length, sessionDisplayDays, false)
+    max_sesa := max
+    min_sesa := min
+    curmax_sesa := curmax
+    curmin_sesa := curmin
+
+if show_sesb and sesb_range
+    [max, min, curmax, curmin] = get_range(is_sesb, sesb_txt, sesb_css, sesb_midline, sesb_midline_length, sessionDisplayDays, false)
+    max_sesb := max
+    min_sesb := min
+    curmax_sesb := curmax
+    curmin_sesb := curmin
+
+if show_sesc and sesc_range
+    [max, min, curmax, curmin] = get_range(is_sesc, sesc_txt, sesc_css, sesc_midline, sesc_midline_length, sessionDisplayDays, true)
+    max_sesc := max
+    min_sesc := min
+    curmax_sesc := curmax
+    curmin_sesc := curmin
+
+if show_sesd and sesd_range
+    [max, min, curmax, curmin] = get_range(is_sesd, sesd_txt, sesd_css, sesd_midline, sesd_midline_length, sessionDisplayDays, false)
+    max_sesd := max
+    min_sesd := min
+    curmax_sesd := curmax
+    curmin_sesd := curmin
+
+//Mean
+if show_sesa and sesa_avg
+    avg = get_avg(is_sesa)
+    set_line(is_sesa, avg, avg, sesa_css)
+
+if show_sesb and sesb_avg
+    avg = get_avg(is_sesb)
+    set_line(is_sesb, avg, avg, sesb_css)
+
+if show_sesc and sesc_avg
+    avg = get_avg(is_sesc)
+    set_line(is_sesc, avg, avg, sesc_css)
+
+if show_sesd and sesd_avg
+    avg = get_avg(is_sesd)
+    set_line(is_sesd, avg, avg, sesd_css)
+
+//-----------------------------------------------------------------------------
+
+var GRP_DAYOC = "Day Open/Close"
+showDayOpenLine = input.bool(true, 'Show Day Open Line', inline = 'dayoc_show', group = GRP_DAYOC)
+showDayCloseLine = input.bool(true, 'Show Day Close Line', inline = 'dayoc_show', group = GRP_DAYOC)
+open_line_color = input.color(color.green, 'Open Line Color', inline = 'dayoc_col', group = GRP_DAYOC)
+close_line_color = input.color(color.red, 'Close Line Color', inline = 'dayoc_col', group = GRP_DAYOC)
+openLineWidth = input.int(2, 'Open Line Width', minval = 1, maxval = 5, inline = 'dayoc_w', group = GRP_DAYOC)
+closeLineWidth = input.int(2, 'Close Line Width', minval = 1, maxval = 5, inline = 'dayoc_w', group = GRP_DAYOC)
+openLineStyle = input.string('Solid', 'Open Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'dayoc_st', group = GRP_DAYOC)
+closeLineStyle = input.string('Dotted', 'Close Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'dayoc_st', group = GRP_DAYOC)
+openLineTransparency = input.int(0, 'Open Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
+closeLineTransparency = input.int(0, 'Close Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
+line_length_factor_1m = input.int(130, 'Line Length Factor (1m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_5m = input.int(24, 'Line Length Factor (5m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_15m = input.int(7, 'Line Length Factor (15m)', minval = 1, group = GRP_DAYOC)
+line_length_factor_other = input.int(10, 'Line Length Factor (Other TF)', minval = 1, group = GRP_DAYOC)
+showDayOCBox = input.bool(true, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
+dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = GRP_DAYOC)
+
+var GRP_TIMETGT = "Time Targets (Vertical)"
+enableTimeTargets = input.bool(true, 'Show Time Targets', group = GRP_TIMETGT, tooltip = 'خطوط عمودی روی ساعت‌های داده‌شده، بر اساس تایم‌زون انتخابی همین گروه')
+timeTargetTzMode = input.string('Custom UTC', 'Timezone', options = ['Custom UTC', 'Same as Sessions', 'Exchange'], group = GRP_TIMETGT, tooltip = 'Custom UTC = آفست زیر | Same as Sessions = همان تایم‌زون گروه Timezone سشن‌ها | Exchange = تایم‌زون صرافی نماد')
+timeTargetUtcOffset = input.float(3.5, 'UTC Offset (hours)', minval = -12.0, maxval = 14.0, step = 0.25, group = GRP_TIMETGT, tooltip = 'فقط وقتی Timezone = Custom UTC. پیش‌فرض ۳.۵ = UTC+03:30. مثال: 0 = UTC، 3 = UTC+3، 3.5 = UTC+3:30')
+timeTargetDisplayDays = input.int(1, 'Display Days', minval = 1, maxval = 10, group = GRP_TIMETGT, tooltip = 'تعداد روزهای نمایش: ۱ = فقط امروز، ۲ = امروز + دیروز، و همین‌طور بیشتر')
+timeTargetsCsv = input.string('03:30,04:30,08:00,09:00,09:30,10:30,14:30,15:00,15:30,16:00,16:30,17:00,17:30,18:00,20:00,21:30,23:00,23:30', 'Times (HH:MM, comma-separated)', group = GRP_TIMETGT, tooltip = 'لیست تایم‌ها با کاما در همان تایم‌زون انتخابی؛ پیش‌فرض برای UTC+03:30')
+timeTargetColor = input.color(color.new(#78909c, 0), 'Line Color', inline = 'tt_col', group = GRP_TIMETGT)
+timeTargetWidth = input.int(1, 'Line Width', minval = 1, maxval = 5, inline = 'tt_col', group = GRP_TIMETGT)
+timeTargetStyle = input.string('Dotted', 'Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'tt_st', group = GRP_TIMETGT)
+timeTargetTransparency = input.int(50, 'Line Transparency', minval = 0, maxval = 100, inline = 'tt_st', group = GRP_TIMETGT)
+showTimeTargetLabels = input.bool(true, 'Show Time Labels', group = GRP_TIMETGT)
+timeTargetLabelSize = input.string('Tiny', 'Label Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_TIMETGT)
+
+// ساخت رشتهٔ تایم‌زون UTC از آفست ساعتی (مثلاً 3.5 → UTC+3:30)
+formatUtcOffsetTz(float hoursOffset) =>
+    float absH = math.abs(hoursOffset)
+    int whole = int(math.floor(absH + 1e-9))
+    int mins = int(math.round((absH - whole) * 60.0))
+    if mins >= 60
+        whole += 1
+        mins := 0
+    string sign = hoursOffset >= 0 ? '+' : '-'
+    mins == 0 ? str.format('UTC{0}{1}', sign, whole) : str.format('UTC{0}{1}:{2}', sign, whole, mins < 10 ? '0' + str.tostring(mins) : str.tostring(mins))
+
+// MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
+var GRP_MAPW = "MAP Weekly Targets"
+enableMapWeekly = input.bool(false, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. اول از همه رسم می‌شود تا با تارگت‌های زیاد یا Heavy script حذف نشود.')
+mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
+mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
+mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
+mapShow25   = input.bool(true, 'Show 25%', inline = 'map_mid', group = GRP_MAPW)
+mapShow75   = input.bool(true, 'Show 75%', inline = 'map_mid', group = GRP_MAPW)
+mapShowExtAbove = input.bool(true, 'Extensions Above High', inline = 'map_ext', group = GRP_MAPW)
+mapShowExtBelow = input.bool(true, 'Extensions Below Low', inline = 'map_ext', group = GRP_MAPW)
+mapShow1125 = input.bool(false, '1.125x', inline = 'map_x1', group = GRP_MAPW)
+mapShow125  = input.bool(true, '1.25x', inline = 'map_x1', group = GRP_MAPW)
+mapShow1375 = input.bool(false, '1.375x', inline = 'map_x1', group = GRP_MAPW)
+mapShow150  = input.bool(true, '1.5x', inline = 'map_x2', group = GRP_MAPW)
+mapShow175  = input.bool(true, '1.75x', inline = 'map_x2', group = GRP_MAPW)
+mapShow200  = input.bool(true, '2x', inline = 'map_x2', group = GRP_MAPW)
+mapExtendBars = input.int(150, 'Extend Lines (Bars)', minval = 0, maxval = 490, group = GRP_MAPW)
+mapShowLabels = input.bool(true, 'Show Labels', group = GRP_MAPW)
+mapLineTransparency = input.int(30, 'Line Transparency', minval = 0, maxval = 100, group = GRP_MAPW)
+mapKeyLineWidth = input.int(1, 'Key Line Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapMidLineWidth = input.int(1, 'Mid/Retrace Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapExtLineWidth = input.int(1, 'Extension Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
+mapKeyLineStyle = input.string('Dotted', 'Key Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapMidLineStyle = input.string('Dotted', 'Mid Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapExtLineStyle = input.string('Dotted', 'Extension Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'map_st', group = GRP_MAPW)
+mapHighColor = input.color(#FF4D6D, 'High Color', inline = 'map_c1', group = GRP_MAPW)
+mapLowColor  = input.color(#7CFF47, 'Low Color', inline = 'map_c1', group = GRP_MAPW)
+mapMidColor  = input.color(#FFE566, 'Mid Color', inline = 'map_c2', group = GRP_MAPW)
+mapRetraceColor = input.color(#7AA2FF, '25/75% Color', inline = 'map_c2', group = GRP_MAPW)
+mapExtColor = input.color(#C084FC, 'Extension Color', group = GRP_MAPW)
+
+dayOcStyleFromString(string s) =>
+    s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
+
+line_length_factor = switch
+    timeframe.isminutes and timeframe.period == "1" => line_length_factor_1m
+    timeframe.isminutes and timeframe.period == "5" => line_length_factor_5m
+    timeframe.isminutes and timeframe.period == "15" => line_length_factor_15m
+    => line_length_factor_other
+
+line_length = math.round(line_length_factor * 10)
+
+is_new_day = ta.change(time("D")) != 0
+
+// هفتهٔ قبل از کندل استاندارد — روی Range/Renko نباید از tickerid چارت استفاده شود
+// چون tickerid نوع چارت را داخل خودش دارد و Weekly اشتباه می‌سازد
+mapStdTicker = ticker.standard(syminfo.tickerid)
+[mapPwHighRaw, mapPwLowRaw, mapPrevWeekTime] = request.security(mapStdTicker, "W", [high[1], low[1], time[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+
+// قفل با شناسهٔ هفته از خود security — روی رنج دقیق‌تر از ta.change(time("W")) چارت
+var float mapPwHigh = na
+var float mapPwLow = na
+var int mapLockedWeekTime = na
+bool mapRawOk = not na(mapPwHighRaw) and not na(mapPwLowRaw) and mapPwHighRaw > mapPwLowRaw and not na(mapPrevWeekTime)
+if mapRawOk and (na(mapLockedWeekTime) or mapPrevWeekTime != mapLockedWeekTime)
+    mapPwHigh := mapPwHighRaw
+    mapPwLow := mapPwLowRaw
+    mapLockedWeekTime := mapPrevWeekTime
+
+// رسم MAP: از ایندکس کندل (حداکثر ~۴۹۰ عقب) تا جلو — کم‌حجم، اولویت اول بعد از clear
+drawMapWeeklyLevel(float price, color col, int width, string styleStr, int startIdx, int endIdx) =>
+    if not na(price) and not na(startIdx) and not na(endIdx) and canDrawMapLine()
+        lnStyle = styleFromString(styleStr)
+        int sIdx = math.max(0, math.min(startIdx, endIdx - 1))
+        int eIdx = math.max(sIdx + 1, endIdx)
+        trackMapLine(line.new(chart.point.from_index(sIdx, price), chart.point.from_index(eIdx, price), color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
+        if mapShowLabels and canDrawMapLabel()
+            int baseX = targetLabelBaseX(mapExtendBars)
+            int lineEnd = targetLabelMaxX(mapExtendBars)
+            int lblX = getStaggerX(price, baseX, 2, lineEnd)
+            trackMapLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+
+// تعداد کندل از ابتدای هفتهٔ جاری؛ روی رنج/غیرزمانی از lookback ثابت استفاده می‌شود
+mapBarsSinceWeekStart() =>
+    int result = MAP_MAX_LOOKBACK
+    int secs = timeframe.in_seconds()
+    // رنج/رنکو/تیک: طول کندل ثابت نیست → in_seconds = na
+    if not na(secs) and secs > 0
+        int tfMs = secs * 1000
+        int weekStart = time("W")
+        if not na(weekStart) and weekStart > 0 and not na(time)
+            result := int(math.max((time - weekStart) / tfMs, 1))
+    result
+
+drawAllMapWeeklyLevels() =>
+    if enableMapWeekly and not na(mapPwHigh) and not na(mapPwLow)
+        float mapRange = mapPwHigh - mapPwLow
+        if mapRange > 0
+            int lookback = math.min(math.max(mapBarsSinceWeekStart(), 10), MAP_MAX_LOOKBACK)
+            int startIdx = math.max(0, bar_index - lookback)
+            int endIdx = bar_index + math.max(mapExtendBars, 10)
+            float mapMid = (mapPwHigh + mapPwLow) / 2.0
+            float map25 = mapPwLow + mapRange * 0.25
+            float map75 = mapPwLow + mapRange * 0.75
+
+            if mapShowHigh
+                drawMapWeeklyLevel(mapPwHigh, mapHighColor, mapKeyLineWidth, mapKeyLineStyle, startIdx, endIdx)
+            if mapShowLow
+                drawMapWeeklyLevel(mapPwLow, mapLowColor, mapKeyLineWidth, mapKeyLineStyle, startIdx, endIdx)
+            if mapShowMid
+                drawMapWeeklyLevel(mapMid, mapMidColor, mapMidLineWidth, mapMidLineStyle, startIdx, endIdx)
+            if mapShow25
+                drawMapWeeklyLevel(map25, mapRetraceColor, mapMidLineWidth, mapMidLineStyle, startIdx, endIdx)
+            if mapShow75
+                drawMapWeeklyLevel(map75, mapRetraceColor, mapMidLineWidth, mapMidLineStyle, startIdx, endIdx)
+
+            if mapShowExtAbove
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.125, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.25, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.375, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.50, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 0.75, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwHigh + mapRange * 1.00, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+
+            if mapShowExtBelow
+                if mapShow1125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.125, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow125
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.25, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow1375
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.375, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow150
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.50, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow175
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 0.75, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+                if mapShow200
+                    drawMapWeeklyLevel(mapPwLow - mapRange * 1.00, mapExtColor, mapExtLineWidth, mapExtLineStyle, startIdx, endIdx)
+
+[open_1m, close_1m] = if showDayOpenLine or showDayCloseLine or showDayOCBox
+    request.security(ticker.standard(syminfo.tickerid), "1", [open, close], lookahead=barmerge.lookahead_off)
+else
+    [na, na]
+
+var float open_today_price = na
+var float close_yesterday_price = na
+
+var int dayCountOpenClose = 0
+
+if is_new_day
+    open_today_price := open_1m
+    close_yesterday_price := close_1m[1]
+    dayCountOpenClose += 1
+
+// Reuse 2 var lines — avoid creating a new line on every bar
+var line dayOpenHistLine = na
+var line dayCloseHistLine = na
+openLnStyle = dayOcStyleFromString(openLineStyle)
+closeLnStyle = dayOcStyleFromString(closeLineStyle)
+if dayCountOpenClose <= 2
+    if showDayOpenLine and not na(open_today_price)
+        if na(dayOpenHistLine)
+            dayOpenHistLine := line.new(bar_index, open_today_price, bar_index - line_length, open_today_price, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = openLnStyle)
+        else
+            line.set_xy1(dayOpenHistLine, bar_index, open_today_price)
+            line.set_xy2(dayOpenHistLine, bar_index - line_length, open_today_price)
+            line.set_color(dayOpenHistLine, color.new(open_line_color, openLineTransparency))
+            line.set_width(dayOpenHistLine, openLineWidth)
+            line.set_style(dayOpenHistLine, openLnStyle)
+    if showDayCloseLine and not na(close_yesterday_price)
+        if na(dayCloseHistLine)
+            dayCloseHistLine := line.new(bar_index, close_yesterday_price, bar_index - line_length, close_yesterday_price, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = closeLnStyle)
+        else
+            line.set_xy1(dayCloseHistLine, bar_index, close_yesterday_price)
+            line.set_xy2(dayCloseHistLine, bar_index - line_length, close_yesterday_price)
+            line.set_color(dayCloseHistLine, color.new(close_line_color, closeLineTransparency))
+            line.set_width(dayCloseHistLine, closeLineWidth)
+            line.set_style(dayCloseHistLine, closeLnStyle)
+
+// ================================================================================================
+// بخش ج: ثبت سقف/کف/میدلاین هر سشن به‌عنوان تارگت + اپن/کلوز روزانه + پنل
+// ================================================================================================
+//#region ———————————————————— SESSION TARGETS
+
+
+registerSessionTargetEx(float price, color col, string labelText, int lineWidth) =>
+    if not na(price) and canDrawLine() and canDrawLabel()
+        drawTargetLineLabel(bar_index, price, col, lineWidth, sessionTargetLineStyle, sessionTargetLineTransparency, labelText, targetLabelGapBars, 2)
+
+if bar_index == last_bar_index
+    clearDrawings()
+    resetLabelStagger()
+
+    if deleteHitTargets
+        prepareHitWindow(hitGraceBarsInput)
+
+    // MAP اول — فقط حدود ۱۳ خط؛ قبل از تارگت‌های قیمتی تا با Heavy script حذف نشود
+    drawAllMapWeeklyLevels()
+
+    bool showStarred  = nodeDisplayMode == 'Starred'
+    bool showStarless = nodeDisplayMode == 'Starless'
+
+    if showStarred
+        if cNodeSym.nodesUp.size() > 0
+            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
+        if cNodeSym.nodesDown.size() > 0
+            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
+    if showStarless
+        if cNodeNoSym.nodesUp.size() > 0
+            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
+        if cNodeNoSym.nodesDown.size() > 0
+            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars)
+
+    NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
+
+    if enableSingleNode1Targets
+        if showTargetNode1Up
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, minDblProximityMarkerSize)
+        if showTargetNode1Down
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, minDblProximityMarkerSize)
+
+    if enableSingleNode2Targets
+        if showTargetNode1Up
+            cTarget.drawingTargetsNode2(true,  showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+        if showTargetNode1Down
+            cTarget.drawingTargetsNode2(false, showTargetNode2Input, targetNode2Width, targetNode2Style, targetNode2MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+
+    if enablePairNode12Targets
+        if showTargetNode1Up
+            cTarget.drawingPairTargetsNode12(true,  showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+        if showTargetNode1Down
+            cTarget.drawingPairTargetsNode12(false, showPairMinInput, showPairMaxInput, showPairDoubleInput, showPairCorrectionInput, pairMinWidth, pairMaxWidth, pairDoubleWidth, pairCorrectionWidth, pairMinStyle, pairMaxStyle, pairDoubleStyle, pairCorrectionStyle, pairTargetMaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency)
+
+    if enableRoundTargets
+        if roundApplyUp
+            drawRoundNumberTargets(roundBasePrice, true,  targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, true)
+        if roundApplyDown
+            drawRoundNumberTargets(roundBasePrice, false, targetLabelGapBars, roundDeleteHit, roundHitGraceBars, roundLineWidth, roundLineStyle, roundLineTransparency, roundLineColor, roundMinVisiblePrice, startPointInput, not roundApplyUp)
+
+    if enableSessionTargets
+        if show_sesa and sesa_range
+            if applySessionHigh
+                registerSessionTargetEx(curmax_sesa, sesa_css, sesa_txt + " High", sessionHighLineWidth)
+            if applySessionLow
+                registerSessionTargetEx(curmin_sesa, sesa_css, sesa_txt + " Low", sessionLowLineWidth)
+            if applySessionMid and not na(curmax_sesa) and not na(curmin_sesa)
+                midA = (curmax_sesa + curmin_sesa) / 2
+                registerSessionTargetEx(midA, sesa_css, sesa_txt + " Mid", sessionMidLineWidth)
+        if show_sesb and sesb_range
+            if applySessionHigh
+                registerSessionTargetEx(curmax_sesb, sesb_css, sesb_txt + " High", sessionHighLineWidth)
+            if applySessionLow
+                registerSessionTargetEx(curmin_sesb, sesb_css, sesb_txt + " Low", sessionLowLineWidth)
+            if applySessionMid and not na(curmax_sesb) and not na(curmin_sesb)
+                midB = (curmax_sesb + curmin_sesb) / 2
+                registerSessionTargetEx(midB, sesb_css, sesb_txt + " Mid", sessionMidLineWidth)
+        if show_sesc and sesc_range
+            if applySessionHigh
+                registerSessionTargetEx(curmax_sesc, sesc_css, sesc_txt + " High", sessionHighLineWidth)
+            if applySessionLow
+                registerSessionTargetEx(curmin_sesc, sesc_css, sesc_txt + " Low", sessionLowLineWidth)
+            if applySessionMid and not na(curmax_sesc) and not na(curmin_sesc)
+                midC = (curmax_sesc + curmin_sesc) / 2
+                registerSessionTargetEx(midC, sesc_css, sesc_txt + " Mid", sessionMidLineWidth)
+        if show_sesd and sesd_range
+            if applySessionHigh
+                registerSessionTargetEx(curmax_sesd, sesd_css, sesd_txt + " High", sessionHighLineWidth)
+            if applySessionLow
+                registerSessionTargetEx(curmin_sesd, sesd_css, sesd_txt + " Low", sessionLowLineWidth)
+            if applySessionMid and not na(curmax_sesd) and not na(curmin_sesd)
+                midD = (curmax_sesd + curmin_sesd) / 2
+                registerSessionTargetEx(midD, sesd_css, sesd_txt + " Mid", sessionMidLineWidth)
+
+    if showDayOpenLine and not na(open_today_price)
+        drawTargetLineLabel(bar_index, open_today_price, open_line_color, openLineWidth, openLineStyle, openLineTransparency, "H Day Open", targetLabelGapBars, 2)
+
+    if showDayCloseLine and not na(close_yesterday_price)
+        drawTargetLineLabel(bar_index, close_yesterday_price, close_line_color, closeLineWidth, closeLineStyle, closeLineTransparency, "L Day Close", targetLabelGapBars, 2)
+
+    if showDayOCBox and not na(open_today_price) and not na(close_yesterday_price)
+        boxTop = math.max(open_today_price, close_yesterday_price)
+        boxBot = math.min(open_today_price, close_yesterday_price)
+        ocBox = box.new(left = bar_index, top = boxTop, right = bar_index + targetLabelGapBars, bottom = boxBot, bgcolor = dayOCBoxBgColor, border_color = color.new(color.white, 70), border_width = 1, border_style = line.style_solid)
+        trackBox(ocBox)
+
+    // تارگت‌های زمانی عمودی — آخر صف بودجه (اگر جا کم باشد حذف می‌شوند، نه تارگت قیمتی)
+    if enableTimeTargets
+        string ttTz = timeTargetTzMode == 'Exchange' ? syminfo.timezone : timeTargetTzMode == 'Same as Sessions' ? tz : formatUtcOffsetTz(timeTargetUtcOffset)
+        int yToday = year(timenow, ttTz)
+        int mToday = month(timenow, ttTz)
+        int dToday = dayofmonth(timenow, ttTz)
+        int noonToday = timestamp(ttTz, yToday, mToday, dToday, 12, 0, 0)
+        ttLnStyle = dayOcStyleFromString(timeTargetStyle)
+        color ttCol = color.new(timeTargetColor, timeTargetTransparency)
+        float ttLabelY = high
+        array<string> ttParts = str.split(timeTargetsCsv, ',')
+        if ttParts.size() > 0
+            for dayOffset = 0 to timeTargetDisplayDays - 1
+                int dayAnchor = noonToday - dayOffset * 86400000
+                int yDay = year(dayAnchor, ttTz)
+                int mDay = month(dayAnchor, ttTz)
+                int dDay = dayofmonth(dayAnchor, ttTz)
+                for ti = 0 to ttParts.size() - 1
+                    string rawT = str.replace_all(str.trim(ttParts.get(ti)), ' ', '')
+                    if str.length(rawT) >= 4
+                        array<string> hm = str.split(rawT, ':')
+                        if hm.size() >= 2
+                            float hhF = str.tonumber(hm.get(0))
+                            float mmF = str.tonumber(hm.get(1))
+                            if not na(hhF) and not na(mmF)
+                                int hh = int(hhF)
+                                int mm = int(mmF)
+                                if hh >= 0 and hh <= 23 and mm >= 0 and mm <= 59
+                                    int ts = timestamp(ttTz, yDay, mDay, dDay, hh, mm, 0)
+                                    if not na(ts) and canDrawLine()
+                                        line ttLn = line.new(x1 = ts, y1 = ttLabelY, x2 = ts, y2 = ttLabelY * 0.999, xloc = xloc.bar_time, extend = extend.both, color = ttCol, width = timeTargetWidth, style = ttLnStyle)
+                                        trackLine(ttLn)
+                                        if showTimeTargetLabels and canDrawLabel()
+                                            string lblTxt = (hh < 10 ? '0' : '') + str.tostring(hh) + ':' + (mm < 10 ? '0' : '') + str.tostring(mm)
+                                            label ttLbl = label.new(x = ts, y = ttLabelY, text = lblTxt, xloc = xloc.bar_time, style = label.style_label_down, color = color.new(color.black, 100), textcolor = ttCol, size = textSizeFromString(timeTargetLabelSize))
+                                            trackLabel(ttLbl)
+
+
+//#endregion
