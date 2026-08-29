@@ -442,7 +442,7 @@ MAX_ROUND_LEVELS = 40
 MAP_LINE_BUDGET  = 24
 MAP_LABEL_BUDGET = 24
 MAP_MAX_LOOKBACK = 490
-STAGGER_SCAN_CAP = 96
+STAGGER_SCAN_CAP = 48
 INCOMPLETE2_CIRCLE_SEGMENTS = 24
 
 // Hit-check cache: build once per redraw, then O(1) per target
@@ -564,93 +564,59 @@ shouldDeleteHitTarget(float price, int startIdx, bool isUp, bool deleteHit, int 
 // --- آرایه‌های جلوگیری از تداخل لیبل‌ها: صعود / نزول / سایر جدا هستند ---
 var g_stagUpPrice = array.new<float>()
 var g_stagUpX     = array.new<int>()
-var g_stagUpYSlot = array.new<int>()
 var g_stagDnPrice = array.new<float>()
 var g_stagDnX     = array.new<int>()
-var g_stagDnYSlot = array.new<int>()
 var g_stagOtPrice = array.new<float>()
 var g_stagOtX     = array.new<int>()
-var g_stagOtYSlot = array.new<int>()
 
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
-// خط روی قیمت واقعی می‌ماند؛ فقط نوشته جابه‌جا می‌شود (افقی + عمودی برای تارگت‌های نزدیک).
+// خط روی قیمت واقعی می‌ماند؛ نوشته فقط وقتی قیمت نزدیک است جابه‌جا می‌شود.
 var GRP_LBL = "Target Label Anti-Overlap"
 targetLabelPriceTolerancePct = input.float(0.53, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_LBL, tooltip = 'اگر دو تارگت از این درصد به هم نزدیک‌تر باشند، نوشته‌ها از هم جدا می‌شوند')
 targetLabelStaggerStep = input.int(13, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'گام جابجایی افقی روی بدنهٔ خط وقتی تارگت‌ها نزدیک‌اند')
 targetLabelYOffsetPct = input.float(0.001, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'فاصلهٔ پایهٔ عمودی نوشته بالای خط')
-targetLabelStackStepPct = input.float(0.12, 'Nearby Label Vertical Stack (%)', minval = 0.0, maxval = 5.0, step = 0.01, group = GRP_LBL, tooltip = 'وقتی چند تارگت نزدیک‌اند، هر نوشتهٔ بعدی به این اندازه بالاتر می‌رود تا روی هم نیفتند')
+targetLabelStackStepPct = input.float(0.06, 'Nearby Label Vertical Stack (%)', minval = 0.0, maxval = 5.0, step = 0.01, group = GRP_LBL, tooltip = 'فقط برای تارگت‌های نزدیک: هر نوشتهٔ بعدی کمی بالاتر می‌رود تا روی هم نیفتد')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
 
 priceNearLabel(float a, float b) =>
     refP = math.max(math.max(math.abs(a), math.abs(b)), 0.0000001)
     math.abs(a - b) / refP * 100.0 <= targetLabelPriceTolerancePct
 
-// تخمین عرض نوشته بر حسب کندل (برای جلوگیری از هم‌پوشانی افقی متن‌های بلند)
-estimateLabelWidthBars(string txt) =>
-    math.max(targetLabelStaggerStep, int(math.max(str.length(txt), 6) * 1.15))
-
 // lane: 0 = صعود (H)، 1 = نزول (L)، 2 = سایر (سشن/MAP/Day)
-// ۱) خط روی قیمت واقعی
-// ۲) نوشته نزدیک‌ها: اول افقی روی بدنهٔ خط، هم‌زمان پشتهٔ عمودی
-// ۳) لنگر از ~۸۵٪ طول خط جلوتر نمی‌رود
-getStaggerPlacement(float price, int baseX, int lane, int lineEndX, int widthBars) =>
+// تارگت عادی: وسط خط. تارگت نزدیک: افقی به راست + کمی عمودی بالا.
+getStaggerPlacement(float price, int baseX, int lane, int lineEndX) =>
     array<float> prices = lane == 0 ? g_stagUpPrice : lane == 1 ? g_stagDnPrice : g_stagOtPrice
     array<int> xs = lane == 0 ? g_stagUpX : lane == 1 ? g_stagDnX : g_stagOtX
-    array<int> ySlots = lane == 0 ? g_stagUpYSlot : lane == 1 ? g_stagDnYSlot : g_stagOtYSlot
     int lineLen = math.max(lineEndX - bar_index, 10)
-    int lo = math.max(baseX, bar_index + int(lineLen * 0.40))
-    int hi = bar_index + int(math.round(lineLen * 0.88))
+    int lo = math.max(baseX, bar_index + int(lineLen * 0.45))
+    int hi = bar_index + int(math.round(lineLen * 0.85))
     hi := math.max(lo + 1, math.min(hi, lineEndX - 1))
-    int step = math.max(widthBars, targetLabelStaggerStep, 4)
+    int step = math.max(targetLabelStaggerStep, 4)
     int span = math.max(hi - lo, step)
 
+    int slot = 0
     int n = xs.size()
-    int from = n > 0 ? math.max(0, n - STAGGER_SCAN_CAP) : 0
-
-    // پشتهٔ عمودی: یکی بیشتر از نزدیک‌ترین هم‌قیمت‌ها
-    int ySlot = 0
     if n > 0
+        int from = math.max(0, n - STAGGER_SCAN_CAP)
         for i = from to n - 1
             if priceNearLabel(prices.get(i), price)
-                ySlot := math.max(ySlot, ySlots.get(i) + 1)
+                slot += 1
 
-    // افقی: اولین X آزاد که با نوشتهٔ تارگت‌های نزدیک برخورد نکند
-    int chosenX = lo
-    bool found = false
-    for attempt = 0 to 24
-        int cand = lo + attempt * step
-        if cand > hi
-            cand := lo + (attempt * step) % span
-        cand := math.min(math.max(cand, lo), hi)
-        bool clash = false
-        if n > 0
-            for i = from to n - 1
-                if priceNearLabel(prices.get(i), price)
-                    if math.abs(xs.get(i) - cand) < step
-                        clash := true
-                        break
-        if not clash
-            chosenX := cand
-            found := true
-            break
-    if not found
-        chosenX := math.min(lo + (ySlot * step) % span, hi)
-
+    int x = lo + slot * step
+    if x > hi
+        x := lo + (slot * step) % span
+    x := math.min(math.max(x, lo), hi)
     prices.push(price)
-    xs.push(chosenX)
-    ySlots.push(ySlot)
-    [chosenX, ySlot]
+    xs.push(x)
+    [x, slot]
 
 resetLabelStagger() =>
     g_stagUpPrice.clear()
     g_stagUpX.clear()
-    g_stagUpYSlot.clear()
     g_stagDnPrice.clear()
     g_stagDnX.clear()
-    g_stagDnYSlot.clear()
     g_stagOtPrice.clear()
     g_stagOtX.clear()
-    g_stagOtYSlot.clear()
 
 method initColor(series NDS this) =>
     this.colors.push(Color.new(this.settings.c1))
@@ -680,7 +646,7 @@ targetLabelBaseX(int gapBars) =>
 targetLabelMaxX(int gapBars) =>
     bar_index + math.max(gapBars, 10)
 
-// Y لیبل: پایه + پشته برای تارگت‌های نزدیک
+// Y لیبل: پایه؛ فقط نزدیک‌ها پشتهٔ عمودی می‌گیرند
 labelYForSlot(float price, int ySlot) =>
     price + math.abs(price) * (targetLabelYOffsetPct + ySlot * targetLabelStackStepPct) / 100.0
 
@@ -688,13 +654,12 @@ styleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
 
 // lane: 0 صعود، 1 نزول، 2 سایر
-// خط روی قیمت واقعی؛ نوشته نزدیک‌ها افقی+عمودی جدا می‌شود
+// خط روی قیمت واقعی؛ نوشته فقط در برخورد نزدیک جابه‌جا می‌شود
 drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars, int lane) =>
     if not na(price) and canDrawLine()
         int lineEnd = targetLabelMaxX(gapBars)
         int baseX = targetLabelBaseX(gapBars)
-        int widthBars = estimateLabelWidthBars(txt)
-        [lblX, ySlot] = getStaggerPlacement(price, baseX, lane, lineEnd, widthBars)
+        [lblX, ySlot] = getStaggerPlacement(price, baseX, lane, lineEnd)
         trackLine(line.new(chart.point.from_index(startIdx, price), chart.point.from_index(lineEnd, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
         if canDrawLabel()
             trackLabel(label.new(x = lblX, y = labelYForSlot(price, ySlot), text = txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = lineCol, size = textSizeFromString(targetLabelSize)))
@@ -1758,7 +1723,7 @@ drawMapWeeklyLevel(float price, color col, int width, string styleStr, int start
         if mapShowLabels and canDrawMapLabel()
             int baseX = targetLabelBaseX(mapExtendBars)
             int lineEnd = targetLabelMaxX(mapExtendBars)
-            [lblX, ySlot] = getStaggerPlacement(price, baseX, 2, lineEnd, estimateLabelWidthBars("W.L"))
+            [lblX, ySlot] = getStaggerPlacement(price, baseX, 2, lineEnd)
             trackMapLabel(label.new(x = lblX, y = labelYForSlot(price, ySlot), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
 
 // تعداد کندل از ابتدای هفتهٔ جاری؛ روی رنج/غیرزمانی از lookback ثابت استفاده می‌شود
