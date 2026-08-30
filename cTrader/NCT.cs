@@ -261,11 +261,17 @@ namespace cAlgo.Indicators
 
         // ───────────────────────── Label Anti-Overlap ─────────────────────────
 
-        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.2, MinValue = 0.001, MaxValue = 5, Group = "Target Label Anti-Overlap")]
+        [Parameter("Label Collision Tolerance (%)", DefaultValue = 0.53, MinValue = 0.001, MaxValue = 10, Group = "Target Label Anti-Overlap")]
         public double LabelCollisionTolerancePct { get; set; }
 
-        [Parameter("Label Stagger Step (bars)", DefaultValue = 24, MinValue = 2, MaxValue = 200, Group = "Target Label Anti-Overlap")]
+        [Parameter("Label Stagger Step (bars)", DefaultValue = 13, MinValue = 4, MaxValue = 200, Group = "Target Label Anti-Overlap")]
         public int LabelStaggerStep { get; set; }
+
+        [Parameter("Label Height Above Line (%)", DefaultValue = 0.001, MinValue = 0.0, MaxValue = 2.0, Group = "Target Label Anti-Overlap")]
+        public double LabelYOffsetPct { get; set; }
+
+        [Parameter("Label Scan Last", DefaultValue = 48, MinValue = 8, MaxValue = 240, Group = "Target Label Anti-Overlap")]
+        public int LabelScanLast { get; set; }
 
         // ───────────────────────── Round Numbers ─────────────────────────
 
@@ -392,11 +398,14 @@ namespace cAlgo.Indicators
         private readonly List<Node> _nodesUp = new List<Node>();
         private readonly List<Node> _nodesDown = new List<Node>();
         private readonly List<Color> _colors = new List<Color>();
-        private readonly List<double> _stagLabelPrices = new List<double>();
-        private readonly List<DateTime> _stagLabelTimes = new List<DateTime>();
-        private double _labelVisTop = 1;
-        private double _labelVisBot;
-        private double _labelVisHeight = 400;
+        private readonly List<double> _stagUpPrice = new List<double>();
+        private readonly List<int> _stagUpX = new List<int>();
+        private readonly List<double> _stagDnPrice = new List<double>();
+        private readonly List<int> _stagDnX = new List<int>();
+        private readonly List<double> _stagOtPrice = new List<double>();
+        private readonly List<int> _stagOtX = new List<int>();
+        private int _labelLane = 2;
+        private int _labelSlot;
 
         private int _objSeq;
         private string _lastDrawSignature;
@@ -532,10 +541,8 @@ namespace cAlgo.Indicators
                 }
 
                 RemoveDrawings();
-                _stagLabelPrices.Clear();
-                _stagLabelTimes.Clear();
+                ResetLabelStagger();
                 _objSeq = 0;
-                CaptureLabelPriceRange();
 
                 if (_nodesUp.Count > 0)
                     DrawingNumberNodes(true);
@@ -606,8 +613,7 @@ namespace cAlgo.Indicators
             _nodesUp.Clear();
             _nodesDown.Clear();
             _colors.Clear();
-            _stagLabelPrices.Clear();
-            _stagLabelTimes.Clear();
+            ResetLabelStagger();
             _objSeq = 0;
             _fvgBullCount = 0;
             _fvgBearCount = 0;
@@ -1649,6 +1655,8 @@ namespace cAlgo.Indicators
               .Append(FvgThresholdPer.ToString("R")).Append('|')
               .Append(LabelCollisionTolerancePct.ToString("R")).Append('|')
               .Append(LabelStaggerStep).Append('|')
+              .Append(LabelYOffsetPct.ToString("R")).Append('|')
+              .Append(LabelScanLast).Append('|')
               .Append(SwCalcLogarithm).Append('|')
               .Append(SwCalcSymmetry).Append('|')
               .Append(ShowStarSuffix).Append('|')
@@ -1729,106 +1737,76 @@ namespace cAlgo.Indicators
             return (lastIndex - firstHitBar) >= HitGraceBars;
         }
 
-        private DateTime TargetLabelTime(DateTime startTime, DateTime endTime)
+        // NCT Final1: 3 lanes (H / L / other), start at mid of the future line,
+        // same-lane near prices step right, stay inside 45%–85% columns.
+        private void ResetLabelStagger()
         {
-            long ticks = startTime.Ticks + (endTime.Ticks - startTime.Ticks) / 2;
-            return new DateTime(ticks, startTime.Kind);
+            _stagUpPrice.Clear();
+            _stagUpX.Clear();
+            _stagDnPrice.Clear();
+            _stagDnX.Clear();
+            _stagOtPrice.Clear();
+            _stagOtX.Clear();
+            _labelSlot = 0;
         }
 
-        private static DateTime LerpTime(DateTime a, DateTime b, double t)
+        private static bool PriceNearLabel(double a, double b, double tolerance)
         {
-            if (t <= 0)
-                return a;
-            if (t >= 1)
-                return b;
-            long ticks = a.Ticks + (long)((b.Ticks - a.Ticks) * t);
-            return new DateTime(ticks, a.Kind);
+            double den = Math.Max(Math.Max(Math.Abs(a), Math.Abs(b)), 1e-7);
+            return Math.Abs(a - b) / den * 100.0 <= tolerance;
         }
 
-        private double LabelNewness(DateTime formedAt)
+        private static double LabelYAboveLine(double price, double yOffsetPct)
         {
-            if (Bars == null || Bars.Count < 2)
-                return 1.0;
-
-            int last = Bars.Count - 1;
-            int first = Math.Max(0, last - Math.Max(StartPoint, 50));
-            DateTime t0 = Bars.OpenTimes[first];
-            DateTime t1 = Bars.OpenTimes[last];
-            if (formedAt <= t0)
-                return 0.0;
-            if (formedAt >= t1)
-                return 1.0;
-
-            double span = (t1 - t0).TotalSeconds;
-            if (span < 1e-9)
-                return 1.0;
-            return (formedAt - t0).TotalSeconds / span;
+            return price + Math.Abs(price) * yOffsetPct / 100.0;
         }
 
-        private bool LabelSlotTaken(DateTime slotTime, double price)
+        private int GetStaggerLabelIndex(double price, int lane)
         {
-            TimeSpan bar = AverageBarDuration();
-            int occupyBars = Math.Max(6, 8 + TargetFontSizeValue() / 2);
-            long occupyTicks = bar.Ticks * occupyBars;
+            int last = Bars != null && Bars.Count > 0 ? Bars.Count - 1 : 0;
+            int lineLen = Math.Max(1, TargetGapBars);
+            int step = Math.Max(4, LabelStaggerStep);
+            int baseX = last + Math.Max(1, lineLen / 2);
+            int lo = last + Math.Max(1, (int)Math.Round(lineLen * 0.45));
+            if (lo < baseX)
+                lo = baseX;
+            int hi = last + (int)Math.Round(lineLen * 0.85);
+            if (hi <= last)
+                hi = last + Math.Max(1, (int)Math.Round(lineLen * 0.85));
+            int span = Math.Max(1, hi - lo);
 
-            for (int i = 0; i < _stagLabelPrices.Count; i++)
+            int x = baseX;
+            if (x >= hi)
+                x = lo + (_labelSlot++ * step % span);
+
+            List<double> prices = lane == 0 ? _stagUpPrice : (lane == 1 ? _stagDnPrice : _stagOtPrice);
+            List<int> xs = lane == 0 ? _stagUpX : (lane == 1 ? _stagDnX : _stagOtX);
+            int scan = Math.Max(8, LabelScanLast);
+            int i0 = Math.Max(0, prices.Count - scan);
+            for (int i = i0; i < prices.Count; i++)
             {
-                if (!PricesCloseForLabel(_stagLabelPrices[i], price))
+                if (!PriceNearLabel(price, prices[i], LabelCollisionTolerancePct))
                     continue;
-                if (Math.Abs((_stagLabelTimes[i] - slotTime).Ticks) < occupyTicks)
-                    return true;
+                if (x <= xs[i])
+                    x = xs[i] + step;
             }
-            return false;
-        }
 
-        private DateTime PlaceTargetLabelTime(DateTime startTime, DateTime endTime, double price, out bool atRight)
-        {
-            DateTime mid = TargetLabelTime(startTime, endTime);
-            DateTime right = endTime;
-            if (right <= mid)
+            if (x > hi)
+                x = lo + (_labelSlot++ * step % span);
+            if (x < lo)
+                x = lo;
+            if (x > hi)
+                x = hi;
+
+            prices.Add(price);
+            xs.Add(x);
+            if (prices.Count > 240)
             {
-                atRight = false;
-                _stagLabelPrices.Add(price);
-                _stagLabelTimes.Add(mid);
-                return mid;
+                prices.RemoveRange(0, prices.Count - 180);
+                xs.RemoveRange(0, xs.Count - 180);
             }
 
-            double newness = LabelNewness(startTime);
-            DateTime preferred = LerpTime(right, mid, newness);
-
-            DateTime chosen = preferred;
-            bool hasClose = false;
-            bool neighborAtMid = false;
-            for (int i = 0; i < _stagLabelPrices.Count; i++)
-            {
-                if (!PricesCloseForLabel(_stagLabelPrices[i], price))
-                    continue;
-                hasClose = true;
-                if (Math.Abs((_stagLabelTimes[i] - mid).Ticks) <= Math.Abs((_stagLabelTimes[i] - right).Ticks))
-                    neighborAtMid = true;
-            }
-
-            if (hasClose)
-            {
-                DateTime first = neighborAtMid ? right : mid;
-                DateTime second = neighborAtMid ? mid : right;
-                if (!LabelSlotTaken(first, price))
-                    chosen = first;
-                else if (!LabelSlotTaken(second, price))
-                    chosen = second;
-                else
-                    chosen = LerpTime(mid, right, 0.5);
-            }
-            else if (LabelSlotTaken(preferred, price))
-            {
-                DateTime alt = newness >= 0.5 ? right : mid;
-                chosen = LabelSlotTaken(alt, price) ? LerpTime(mid, right, 0.5) : alt;
-            }
-
-            atRight = Math.Abs((chosen - right).Ticks) <= Math.Abs((chosen - mid).Ticks);
-            _stagLabelPrices.Add(price);
-            _stagLabelTimes.Add(chosen);
-            return chosen;
+            return x;
         }
 
         // ───────────────────────── Drawing: cleanup / nodes / zig-zag ─────────────────────────
@@ -2066,6 +2044,7 @@ namespace cAlgo.Indicators
             int endIdx = lastIndex + TargetGapBars;
             DateTime endTime = TimeAtIndex(endIdx);
             string trendPrefix = swUptrendType ? "H " : "L ";
+            _labelLane = swUptrendType ? 0 : 1;
 
             int indexColor = 0;
             var colorByNode = new Color[nodes.Count];
@@ -2221,6 +2200,7 @@ namespace cAlgo.Indicators
             int endIdx = lastIndex + TargetGapBars;
             DateTime endTime = TimeAtIndex(endIdx);
             string trendPrefix = swUptrendType ? "H " : "L ";
+            _labelLane = swUptrendType ? 0 : 1;
 
             int indexColor = 0;
             var colorByNode = new Color[nodes.Count];
@@ -2287,167 +2267,23 @@ namespace cAlgo.Indicators
             }
         }
 
-        private TimeSpan AverageBarDuration()
-        {
-            if (Bars.Count >= 2)
-            {
-                TimeSpan d = Bars.OpenTimes[Bars.Count - 1] - Bars.OpenTimes[Bars.Count - 2];
-                if (d > TimeSpan.Zero)
-                    return d;
-            }
-            return TimeSpan.FromMinutes(1);
-        }
-
-        private void CaptureLabelPriceRange()
-        {
-            _labelVisHeight = 400;
-            _labelVisTop = 1;
-            _labelVisBot = 0;
-
-            try
-            {
-                double h = Chart.Height;
-                if (h >= 2 && !double.IsNaN(h) && !double.IsInfinity(h))
-                    _labelVisHeight = h;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                double top = Chart.TopY;
-                double bot = Chart.BottomY;
-                if (!double.IsNaN(top) && !double.IsNaN(bot) && Math.Abs(top - bot) > 1e-12)
-                {
-                    _labelVisTop = Math.Max(top, bot);
-                    _labelVisBot = Math.Min(top, bot);
-                    return;
-                }
-            }
-            catch
-            {
-            }
-
-            if (Bars == null || Bars.Count == 0)
-                return;
-
-            int last = Bars.Count - 1;
-            int first = Math.Max(0, last - 250);
-            double hi = double.MinValue;
-            double lo = double.MaxValue;
-            for (int i = first; i <= last; i++)
-            {
-                if (Bars.HighPrices[i] > hi)
-                    hi = Bars.HighPrices[i];
-                if (Bars.LowPrices[i] < lo)
-                    lo = Bars.LowPrices[i];
-            }
-            if (hi > lo)
-            {
-                _labelVisTop = hi;
-                _labelVisBot = lo;
-            }
-        }
-
-        private bool PricesCloseForLabel(double a, double b)
-        {
-            double refP = Math.Max(Math.Max(Math.Abs(a), Math.Abs(b)), 1e-7);
-            if (Math.Abs(a - b) / refP * 100.0 <= LabelCollisionTolerancePct)
-                return true;
-
-            double range = _labelVisTop - _labelVisBot;
-            if (range <= 1e-12)
-                return false;
-
-            double dyPx = Math.Abs(a - b) / range * _labelVisHeight;
-            return dyPx <= TargetFontSizeValue() * 3.2;
-        }
-
-        private DateTime StaggerLabelTime(DateTime preferred, double price)
-        {
-            return StaggerLabelTime(preferred, price, DateTime.MaxValue);
-        }
-
-        private DateTime StaggerLabelTime(DateTime preferred, double price, DateTime lineEnd)
-        {
-            DateTime t = preferred;
-            TimeSpan bar = AverageBarDuration();
-            int stepBars = Math.Max(4, LabelStaggerStep);
-            TimeSpan step = TimeSpan.FromTicks(bar.Ticks * stepBars);
-            // Centered text occupies several bars; bigger fonts need a wider exclusive slot.
-            int occupyBars = Math.Max(stepBars, 8 + TargetFontSizeValue());
-            long occupyTicks = bar.Ticks * occupyBars;
-
-            DateTime maxT = lineEnd;
-            if (maxT < preferred || maxT == DateTime.MaxValue)
-                maxT = preferred.Add(TimeSpan.FromTicks(bar.Ticks * Math.Max(80, stepBars * 8)));
-
-            int guard = 0;
-            while (guard < 48)
-            {
-                DateTime pushTo = t;
-                bool collision = false;
-                for (int i = 0; i < _stagLabelPrices.Count; i++)
-                {
-                    if (!PricesCloseForLabel(_stagLabelPrices[i], price))
-                        continue;
-                    long dt = Math.Abs((_stagLabelTimes[i] - t).Ticks);
-                    if (dt >= occupyTicks)
-                        continue;
-                    collision = true;
-                    DateTime next = _stagLabelTimes[i].Add(step);
-                    if (next > pushTo)
-                        pushTo = next;
-                }
-                if (!collision)
-                    break;
-                if (pushTo <= t)
-                    pushTo = t.Add(step);
-                t = pushTo > maxT ? maxT : pushTo;
-                if (t >= maxT)
-                    break;
-                guard++;
-            }
-
-            _stagLabelPrices.Add(price);
-            _stagLabelTimes.Add(t);
-            return t;
-        }
-
         private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
             int width, LineStyle style, string label, Color labelColor)
         {
-            DrawTargetLine(startTime, endTime, price, lineColor, width, style, label, labelColor, false);
-        }
-
-        private void DrawTargetLine(DateTime startTime, DateTime endTime, double price, Color lineColor,
-            int width, LineStyle style, string label, Color labelColor, bool pinLabelAtEnd)
-        {
             Chart.DrawTrendLine(NextName("Tgt"), startTime, price, endTime, price, lineColor, width, style);
 
-            DateTime labelTime;
-            bool atRight;
-            if (pinLabelAtEnd)
-            {
-                labelTime = endTime;
-                atRight = true;
-                _stagLabelPrices.Add(price);
-                _stagLabelTimes.Add(labelTime);
-            }
-            else
-            {
-                labelTime = PlaceTargetLabelTime(startTime, endTime, price, out atRight);
-            }
-
-            var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, price, labelColor);
+            int labelIdx = GetStaggerLabelIndex(price, _labelLane);
+            DateTime labelTime = TimeAtIndex(labelIdx);
+            double labelY = LabelYAboveLine(price, LabelYOffsetPct);
+            var txt = Chart.DrawText(NextName("TgtLbl"), label, labelTime, labelY, labelColor);
             txt.FontSize = TargetFontSizeValue();
             txt.VerticalAlignment = VerticalAlignment.Center;
-            txt.HorizontalAlignment = atRight ? HorizontalAlignment.Right : HorizontalAlignment.Center;
+            txt.HorizontalAlignment = HorizontalAlignment.Left;
         }
 
         private void DrawingDayOpenClose()
         {
+            _labelLane = 2;
             if (_dailyBars == null)
             {
                 try { _dailyBars = MarketData.GetBars(TimeFrame.Daily); } catch { return; }
@@ -2466,7 +2302,7 @@ namespace cAlgo.Indicators
                 if (openToday > 0 && !double.IsNaN(openToday))
                 {
                     DrawTargetLine(startTime, endTime, openToday, Color.Lime, 2, LineStyle.Solid,
-                        "H Day Open", Color.Lime, true);
+                        "H Day Open", Color.Lime);
                 }
             }
 
@@ -2476,7 +2312,7 @@ namespace cAlgo.Indicators
                 if (closeYesterday > 0 && !double.IsNaN(closeYesterday))
                 {
                     DrawTargetLine(startTime, endTime, closeYesterday, Color.Red, 2, LineStyle.Dots,
-                        "L Day Close", Color.Red, true);
+                        "L Day Close", Color.Red);
                 }
             }
 
@@ -2519,6 +2355,7 @@ namespace cAlgo.Indicators
 
         private void DrawingAsiaSession()
         {
+            _labelLane = 2;
             if (Bars == null || Bars.Count < 2)
                 return;
 
@@ -2650,6 +2487,7 @@ namespace cAlgo.Indicators
 
         private void DrawingRoundNumberTargets(bool isUp)
         {
+            _labelLane = 2;
             if (RoundBasePrice <= 0 || Bars == null || Bars.Count < 2)
                 return;
 
@@ -2820,6 +2658,7 @@ namespace cAlgo.Indicators
 
         private void DrawingMapWeekly()
         {
+            _labelLane = 2;
             if (_weeklyBars == null)
             {
                 try { _weeklyBars = MarketData.GetBars(TimeFrame.Weekly); } catch { return; }
@@ -2850,15 +2689,15 @@ namespace cAlgo.Indicators
             LineStyle extStyle = LineStyle.DotsRare;
 
             if (MapShowHigh)
-                DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "WM", highColor, true);
+                DrawTargetLine(lineStart, lineEnd, high, highColor, 2, keyStyle, "WM", highColor);
             if (MapShowLow)
-                DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "WM", lowColor, true);
+                DrawTargetLine(lineStart, lineEnd, low, lowColor, 2, keyStyle, "WM", lowColor);
             if (MapShowMid)
-                DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "WM", midColor, true);
+                DrawTargetLine(lineStart, lineEnd, (high + low) / 2.0, midColor, 1, midStyle, "WM", midColor);
             if (MapShow25)
-                DrawTargetLine(lineStart, lineEnd, low + range * 0.25, retraceColor, 1, midStyle, "WM", retraceColor, true);
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.25, retraceColor, 1, midStyle, "WM", retraceColor);
             if (MapShow75)
-                DrawTargetLine(lineStart, lineEnd, low + range * 0.75, retraceColor, 1, midStyle, "WM", retraceColor, true);
+                DrawTargetLine(lineStart, lineEnd, low + range * 0.75, retraceColor, 1, midStyle, "WM", retraceColor);
 
             if (MapShowExtAbove)
             {
@@ -2891,7 +2730,7 @@ namespace cAlgo.Indicators
         private void DrawMapExtLevel(DateTime start, DateTime end, double price,
             Color color, LineStyle style)
         {
-            DrawTargetLine(start, end, price, color, 1, style, "WM", color, true);
+            DrawTargetLine(start, end, price, color, 1, style, "WM", color);
         }
 
         private DateTime FindCurrentWeekStart(DateTime currentWeekOpen)
