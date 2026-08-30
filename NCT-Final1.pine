@@ -568,7 +568,7 @@ var GRP_LBL = "Target Label Anti-Overlap"
 targetLabelPriceTolerancePct = input.float(0.53, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_LBL, tooltip = 'فقط اگر دو لیبل هم‌مسیر قیمت نزدیک داشته باشند به راست جابه‌جا می‌شود')
 targetLabelStaggerStep = input.int(13, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'گام جابجایی از وسط به راست؛ فقط روی بدنهٔ خط، نه نوک خط')
 targetLabelYOffsetPct = input.float(0.001, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
-targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC، MAP Weekly)')
+targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC)')
 
 priceNearLabel(float a, float b) =>
     refP = math.max(math.max(math.abs(a), math.abs(b)), 0.0000001)
@@ -1567,6 +1567,7 @@ mapShow175  = input.bool(true, '1.75x', inline = 'map_x2', group = GRP_MAPW)
 mapShow200  = input.bool(true, '2x', inline = 'map_x2', group = GRP_MAPW)
 mapExtendBars = input.int(150, 'Extend Lines (Bars)', minval = 0, maxval = 490, group = GRP_MAPW)
 mapShowLabels = input.bool(true, 'Show Labels', group = GRP_MAPW)
+mapLabelSize = input.string('Small', 'MAP Weekly Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_MAPW, tooltip = 'اندازه فونت نوشته MAP Weekly در انتهای راست خط')
 mapLineTransparency = input.int(30, 'Line Transparency', minval = 0, maxval = 100, group = GRP_MAPW)
 mapKeyLineWidth = input.int(1, 'Key Line Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
 mapMidLineWidth = input.int(1, 'Mid/Retrace Width', minval = 1, maxval = 5, inline = 'map_w', group = GRP_MAPW)
@@ -1616,10 +1617,7 @@ drawMapWeeklyLevel(float price, color col, int width, string styleStr, int start
         int eIdx = math.max(sIdx + 1, endIdx)
         trackMapLine(line.new(chart.point.from_index(sIdx, price), chart.point.from_index(eIdx, price), color = color.new(col, mapLineTransparency), width = width, style = lnStyle))
         if mapShowLabels and canDrawMapLabel()
-            int baseX = targetLabelBaseX(mapExtendBars)
-            int lineEnd = targetLabelMaxX(mapExtendBars)
-            int lblX = getStaggerX(price, baseX, 2, lineEnd)
-            trackMapLabel(label.new(x = lblX, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(targetLabelSize)))
+            trackMapLabel(label.new(x = eIdx, y = labelYAboveLine(price), text = "W.L", style = label.style_label_left, color = color.new(color.black, 100), textcolor = col, size = textSizeFromString(mapLabelSize)))
 
 // تعداد کندل از ابتدای هفتهٔ جاری؛ روی رنج/غیرزمانی از lookback ثابت استفاده می‌شود
 mapBarsSinceWeekStart() =>
