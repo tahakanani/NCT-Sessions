@@ -1,0 +1,4 @@
+{
+  "name": "NCT Sessions — cTrader & Pine",
+  "install": "bash scripts/cloud-install.sh"
+}
