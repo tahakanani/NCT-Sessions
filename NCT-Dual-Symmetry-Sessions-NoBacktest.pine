@@ -884,7 +884,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         targetCorrectionPrice = swUptrendType ? math.exp(logHigh + correctionSizeLog) : math.exp(logHigh - correctionSizeLog)
                         bool shouldDelete = shouldDeleteHitTarget(targetCorrectionPrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Cr.1", gapBars, lane)
 
 // ================================================================================================
 // تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
