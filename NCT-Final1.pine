@@ -699,7 +699,7 @@ pricesWithinTolPct(float a, float b, float tolPct) =>
 drawMinDoubleProximityMarker(int barIdx, float price, float radiusPct, int radiusBars, color lineCol, int fillTransp) =>
     drawCircleMarker(barIdx, price, radiusPct, radiusBars, lineCol, fillTransp)
 
-method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, float incomplete2RadiusPct, int incomplete2RadiusBars, color incomplete2Color, int incomplete2FillTransp) =>
+method drawingNumberNodes(series NDS this, bool swUptrendType, bool underline, int extraGapLines, bool showRegularNodes, bool showDoubleStarNodes, float labelDistPct, float incomplete2RadiusPct, int incomplete2RadiusBars, color incomplete2Color, int incomplete2FillTransp) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     var locText = yloc.belowbar
     if swUptrendType
@@ -722,9 +722,10 @@ method drawingNumberNodes(series NDS this, bool swUptrendType, string suffix, in
             index = node.indexNode
             numberNode  = node.numberNode
             textColor = this.colors.get(indexColor).labelColor
-            // Symmetry nodes display as single-star (*)
-            string baseText = str.tostring(numberNode) + suffix
-            string newText = baseText
+            // عدد بدون ستاره؛ خط زیر فقط برای شمارش بدون سیمتری
+            string newText = str.tostring(numberNode)
+            if underline
+                newText := newText + "\n―"
             if i > 0
                 if nodesRef.get(i - 1).indexNode == node.indexNode
                     newText := '     ' + newText
@@ -1051,10 +1052,10 @@ endPointInput   = input.int(0, 'End Point (Final)', group = GRP2, minval = 0 , m
 
 var GRP1 = "Strategy Config"
 swCalcLogarithm = input.bool(true, 'Calc Nodes with Logarithm' , group = GRP1, tooltip = 'فقط روی محاسبه‌ی خودِ نودها و سیمتری اثر دارد. تارگت‌ها همیشه بر حسب لگاریتم محاسبه می‌شوند.')
-nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'Starred = فقط موتور سیمتری (cNodeSym). Starless = فقط موتور بدون سیمتری (cNodeNoSym). هم‌زمان اجرا نمی‌شوند.')
-verticalGapInput = input.int(0, 'Vertical Gap: Symmetry vs No-Symmetry (lines)', minval = 0, maxval = 15, group = GRP1, tooltip = "تعداد خط خالی فاصله عمودی بین عدد ستاره‌دار (سیمتری) و عدد بدون ستاره")
-showRegularStarredNodes = input.bool(true, 'Show Regular Starred Nodes ( * )', group = GRP1)
-showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes (as single-star *)', group = GRP1, tooltip = 'نودهای سیمتری دیگر به‌صورت ** نمایش داده نمی‌شوند و مثل تک‌ستاره (*) دیده می‌شوند')
+nodeDisplayMode = input.string('Starred', 'Node Display Mode', options = ['Starred', 'Starless'], group = GRP1, tooltip = 'Starred = شمارش با سیمتری (فقط عدد، بدون ستاره). Starless = شمارش بدون سیمتری (عدد با خط زیر). هم‌زمان اجرا نمی‌شوند.')
+verticalGapInput = input.int(0, 'Vertical Gap: Symmetry vs No-Symmetry (lines)', minval = 0, maxval = 15, group = GRP1, tooltip = "تعداد خط خالی فاصله عمودی بین نود سیمتری و نود بدون سیمتری")
+showRegularStarredNodes = input.bool(true, 'Show Regular Nodes', group = GRP1)
+showDoubleStarNodesInput = input.bool(true, 'Show Symmetry Nodes', group = GRP1, tooltip = 'نودهای سیمتری مثل بقیه فقط با عدد نمایش داده می‌شوند؛ ستاره روی نود نیست')
 
 var GRP5 = "Node Targets — Master Switches"
 enableSingleNode1Targets = input.bool(true, 'Show Node 1 Targets (Double.1 + 1.5DL.1 + 0.8DL.1 + Min + 1.3MIN1 + Correction)', group = GRP5)
@@ -1747,14 +1748,14 @@ if bar_index == last_bar_index
 
     if showStarred
         if cNodeSym.nodesUp.size() > 0
-            cNodeSym.drawingNumberNodes(true,  "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
+            cNodeSym.drawingNumberNodes(true,  false, verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
         if cNodeSym.nodesDown.size() > 0
-            cNodeSym.drawingNumberNodes(false, "*", verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
+            cNodeSym.drawingNumberNodes(false, false, verticalGapInput, showRegularStarredNodes, showDoubleStarNodesInput, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
     if showStarless
         if cNodeNoSym.nodesUp.size() > 0
-            cNodeNoSym.drawingNumberNodes(true,  "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
+            cNodeNoSym.drawingNumberNodes(true,  true, 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
         if cNodeNoSym.nodesDown.size() > 0
-            cNodeNoSym.drawingNumberNodes(false, "", 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
+            cNodeNoSym.drawingNumberNodes(false, true, 0, true, false, nodeLabelDistPct, incompleteNode2RadiusPct, incompleteNode2RadiusBars, incompleteNode2CircleColor, incompleteNode2FillTransparency)
 
     NDS cTarget = showStarred ? cNodeSym : cNodeNoSym
 
