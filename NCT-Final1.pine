@@ -567,8 +567,8 @@ var g_stagOtX     = array.new<int>()
 // هرگز به نوک خط نمی‌چسبد (جا برای خودِ متن با style_label_left می‌ماند).
 var GRP_LBL = "Target Label Anti-Overlap"
 targetLabelPriceTolerancePct = input.float(0.53, 'Label Collision Tolerance (%)', minval = 0.001, maxval = 10, step = 0.01, group = GRP_LBL, tooltip = 'فقط اگر دو لیبل هم‌مسیر قیمت نزدیک داشته باشند به راست جابه‌جا می‌شود')
-targetLabelColumns = input.int(3, 'Label Columns', minval = 1, maxval = 6, group = GRP_LBL, tooltip = 'تارگت‌های نزدیک به هم در ستون‌های مختلف روی بدنهٔ خط می‌نشینند. ۳ یا ۴ برای خوانایی بهتر؛ ۱ = حالت قدیمی با گام Stagger')
-targetLabelRowStepPct = input.float(0.0, 'Extra Row Offset (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'اگر تعداد تارگت‌های نزدیک از تعداد ستون‌ها بیشتر شود، دور دوم کمی بالاتر می‌رود. ۰ = خاموش')
+targetLabelColumns = input.int(3, 'Label Columns', minval = 1, maxval = 6, group = GRP_LBL, tooltip = 'تارگت‌های نزدیک به هم در ستون‌های مختلف روی بدنهٔ خط می‌نشینند. اگر تعدادشان از ستون‌ها بیشتر شود، میانهٔ ستون‌ها هم استفاده می‌شود (۳ ستون = ۵ جای مختلف). ۱ = حالت قدیمی با گام Stagger')
+targetLabelRowStepPct = input.float(0.02, 'Extra Row Offset (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'وقتی همهٔ ستون‌ها و میانه‌ها پر شوند، دور بعدی این مقدار بالاتر می‌رود تا نوشته‌ها روی هم نیفتند. ۰ = خاموش')
 targetLabelStaggerStep = input.int(13, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'فقط وقتی Label Columns = ۱ است؛ گام جابجایی از وسط به راست')
 targetLabelYOffsetPct = input.float(0.001, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
 targetLabelSize = input.string('Small', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC)')
@@ -580,9 +580,9 @@ priceNearLabel(float a, float b) =>
 // lane: 0 = صعود (H)، 1 = نزول (L)، 2 = سایر (سشن/MAP/Day)
 // ضابطهٔ چیدمان:
 // 1) ستون اول روی وسط بدنهٔ خط است
-// 2) هر تارگتِ هم‌قیمتِ نزدیک به ستون بعدی می‌رود
+// 2) هر تارگتِ هم‌قیمتِ نزدیک به ستون بعدی می‌رود؛ بعد از پرشدن ستون‌ها، میانهٔ آنها
 // 3) آخرین ستون از ~۸۵٪ طول خط جلوتر نمی‌رود (متن label_left روی نوک خط نمی‌نشیند)
-// خروجی: [x ستون، شمارهٔ دور] — دور دوم فقط وقتی ستون‌ها پر شده باشند
+// خروجی: [x ستون، شمارهٔ دور] — دور بعدی فقط وقتی ستون‌ها و میانه‌ها پر شده باشند
 getStaggerSlot(float price, int baseX, int lane, int lineEndX) =>
     array<float> prices = lane == 0 ? g_stagUpPrice : lane == 1 ? g_stagDnPrice : g_stagOtPrice
     array<int> xs = lane == 0 ? g_stagUpX : lane == 1 ? g_stagDnX : g_stagOtX
@@ -603,8 +603,12 @@ getStaggerSlot(float price, int baseX, int lane, int lineEndX) =>
     int x = lo
     int row = 0
     if cols > 1
-        x := lo + int(math.round((hi - lo) * (slot % cols) / float(cols - 1)))
-        row := int(math.floor(float(slot) / cols))
+        float colGap = (hi - lo) / float(cols - 1)
+        // هر باند = ستون‌ها، سپس میانهٔ ستون‌ها؛ پس دو برچسبِ نزدیک هرگز دقیقاً روی هم نمی‌افتند
+        int perBand = 2 * cols - 1
+        int p = slot % perBand
+        row := int(math.floor(float(slot) / perBand))
+        x := lo + int(math.round(p < cols ? p * colGap : (p - cols) * colGap + colGap / 2.0))
     else
         int step = math.max(targetLabelStaggerStep, 4)
         int span = math.max(hi - lo, step)
