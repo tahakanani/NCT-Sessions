@@ -852,7 +852,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete086
                             proxDbl086Price := targetDouble086Price
-                            drawTargetLineLabel(node.indexPreNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.8DL.1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.8DL.1", gapBars, lane)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(logCorr + moveSizeLog) : math.exp(logCorr - moveSizeLog)
