@@ -1,7 +1,11 @@
 ﻿*.algo
+*.algo.metadata
 .DS_Store
 Thumbs.db
 *.user
 bin/
 obj/
 .vs/
+
+# cTrader Automate writes a local Sources copy next to the build output
+cAlgo/
