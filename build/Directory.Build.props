@@ -1,0 +1,18 @@
+<Project>
+  <!-- Shared build settings for every cTrader Automate project in this folder.
+       Each project compiles a single source file that lives in ../cTrader so the
+       canonical indicator/plugin sources stay in one place. -->
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildThisFileDirectory)../</RepoRoot>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="cTrader.Automate" Version="1.0.19" />
+  </ItemGroup>
+</Project>
