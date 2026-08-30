@@ -429,7 +429,7 @@ MAX_DRAW_LINES   = 450
 MAX_DRAW_LABELS  = 450
 MAX_DRAW_BOXES   = 450
 MAX_DRAW_POLYLINES = 80
-MAX_HIT_LOOKBACK = 400
+MAX_HIT_LOOKBACK = 4900
 MAX_ROUND_LEVELS = 40
 MAP_LINE_BUDGET  = 24
 MAP_LABEL_BUDGET = 24
@@ -449,14 +449,15 @@ var array<float> g_hitSufMaxHigh = array.new<float>()
 var array<float> g_hitSufMinLow = array.new<float>()
 var array<int> g_hitWin = array.from(0, -1)  // [start, end]
 
-prepareHitWindow(int hitGraceBars) =>
+prepareHitWindow(int hitGraceBars, int historyBars) =>
     g_hitSufMaxHigh.clear()
     g_hitSufMinLow.clear()
     g_hitWin.set(0, 0)
     g_hitWin.set(1, -1)
     int lastCheckBar = bar_index - hitGraceBars - 1
     if lastCheckBar >= 0
-        int fromBar = math.max(0, lastCheckBar - MAX_HIT_LOOKBACK + 1)
+        int lookback = math.min(math.max(historyBars, 1), MAX_HIT_LOOKBACK)
+        int fromBar = math.max(0, lastCheckBar - lookback + 1)
         int n = lastCheckBar - fromBar + 1
         if n > 0
             g_hitWin.set(0, fromBar)
@@ -1737,7 +1738,7 @@ if bar_index == last_bar_index
     resetLabelStagger()
 
     if deleteHitTargets
-        prepareHitWindow(hitGraceBarsInput)
+        prepareHitWindow(hitGraceBarsInput, startPointInput)
 
     // MAP اول — فقط حدود ۱۳ خط؛ قبل از تارگت‌های قیمتی تا با Heavy script حذف نشود
     drawAllMapWeeklyLevels()
