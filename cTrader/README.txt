@@ -46,7 +46,7 @@
 - موتور Dual Symmetry (Up/Down) + Log/Linear
 - شماره نودها (**N** / N*) و خطوط زیگ‌زاگ
 - تارگت‌های Node1 و Pair 1+2 (با حذف hit)
-- Density قرمز/زرد + پنل آمار
+- پنل آمار نودها (و FVG در صورت فعال بودن)
 
 ## هنوز نیست (نسخه Pine)
 - Session boxes (NY/London/Tokyo)
