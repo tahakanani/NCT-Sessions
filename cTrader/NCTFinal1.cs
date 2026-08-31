@@ -11,6 +11,7 @@ namespace cAlgo.Indicators
     [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class NCTFinal1 : Indicator
     {
+
         // ───────────────────────── Nodal / Strategy ─────────────────────────
 
         [Parameter("Starting Point Candles", DefaultValue = 4000, MinValue = 1, MaxValue = 5000, Group = "Nodal Calculation Settings")]
@@ -505,7 +506,7 @@ namespace cAlgo.Indicators
         [Parameter("Close Line Transparency", DefaultValue = 0, MinValue = 0, MaxValue = 100, Group = "Day Open/Close")]
         public int CloseLineTransparency { get; set; }
 
-        [Parameter("Show Day Open/Close Panel", DefaultValue = true, Group = "Day Open/Close")]
+        [Parameter("Show Day Open/Close Panel", DefaultValue = false, Group = "Day Open/Close")]
         public bool ShowDayOCBox { get; set; }
 
         [Parameter("Panel Background Color", DefaultValue = "#26FFFFFF", Group = "Day Open/Close")]
@@ -2082,8 +2083,9 @@ namespace cAlgo.Indicators
 
             int lastIndex = Bars.Count - 1;
             int lineEnd = lastIndex + Math.Max(gapBars, 10);
-            int lineStart = Math.Max(startIdx, lastIndex - 490);
-            lineStart = Math.Max(0, Math.Min(lineStart, lineEnd - 1));
+            // Start from the node's own bar. The old lastIndex-490 clamp was a TradingView
+            // drawing limit and made older H/L Double.1 lines begin in empty space.
+            int lineStart = Math.Max(0, Math.Min(startIdx, lineEnd - 1));
             int baseX = lane == 2 ? lastIndex : lastIndex + Math.Max(gapBars, 10) / 2;
             int lblX = labelBeforeLine
                 ? GetStaggerX(price, baseX, lane, lineEnd, true, lastIndex)

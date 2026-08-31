@@ -678,8 +678,7 @@ styleFromString(string s) =>
 drawTargetLineLabel(int startIdx, float price, color lineCol, int width, string styleStr, int transp, string txt, int gapBars, int lane, bool pinToStart = false) =>
     if not na(price) and canDrawLine() and canDrawLabel()
         int lineEnd = targetLabelMaxX(gapBars)
-        int lineStart = math.max(startIdx, bar_index - 490)
-        lineStart := math.max(0, math.min(lineStart, lineEnd - 1))
+        int lineStart = math.max(0, math.min(startIdx, lineEnd - 1))
         int baseX = lane == 2 ? bar_index : targetLabelBaseX(gapBars)
         [lblX, lblRow] = getStaggerSlot(price, baseX, lane, lineEnd, pinToStart)
         trackLine(line.new(chart.point.from_index(lineStart, price), chart.point.from_index(lineEnd, price), color = color.new(lineCol, transp), width = width, style = styleFromString(styleStr)))
@@ -1561,7 +1560,7 @@ line_length_factor_1m = input.int(130, 'Line Length Factor (1m)', minval = 1, gr
 line_length_factor_5m = input.int(24, 'Line Length Factor (5m)', minval = 1, group = GRP_DAYOC)
 line_length_factor_15m = input.int(7, 'Line Length Factor (15m)', minval = 1, group = GRP_DAYOC)
 line_length_factor_other = input.int(10, 'Line Length Factor (Other TF)', minval = 1, group = GRP_DAYOC)
-showDayOCBox = input.bool(true, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
+showDayOCBox = input.bool(false, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
 dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = GRP_DAYOC)
 
 var GRP_TIMETGT = "Time Targets (Vertical)"
