@@ -34,24 +34,38 @@
 
 ---
 
-# NCT Dual Symmetry — cTrader
+# NCT Final1 — cTrader (پورت NCT-Final1.pine)
+
+نسخه کامل برای cTrader. همان گروه‌های ورودی و همان منطق نود، تارگت، سشن، MAP و Day OC.
+
+## نصب Indicator (NCT Final1)
+1. cTrader → Automate
+2. New → Indicator
+3. محتوای فایل NCTFinal1.cs را جایگزین کد پیش‌فرض کنید
+4. Build → Add Instance روی چارت
+
+## شامل چیست
+- موتور Dual Symmetry با حالت Starred / Starless
+- تارگت‌های Node 1 (Double.1, 1.5DL.1, 0.8DL.1, Min 1, 0.8Min.1, 1.3MIN1)
+- تارگت Node 2 و زوج 1+2
+- دایره قرمز نود ۲ ناقص و دایره سبز نزدیکی تارگت
+- سشن‌های NY / London / Tokyo / Sydney
+- MAP Weekly بنفش
+- Day Open / Day Close از کندل روزانه
+- تارگت‌های زمانی عمودی
+- حذف تارگت بعد از hit و چیدمان لیبل
+
+فایل: NCTFinal1.cs در ریشه پروژه و پوشه cTrader
+
+---
+
+# NCT Dual Symmetry — cTrader (نسخه قدیمی)
 
 ## نصب Indicator (NCT)
 1. cTrader را باز کنید → Automate
 2. New → Indicator
 3. محتوای فایل NCT.cs را جایگزین کد پیش‌فرض کنید
 4. Build → اگر خطا نبود، روی چارت Add Instance
-
-## شامل چیست (NCT)
-- موتور Dual Symmetry (Up/Down) + Log/Linear
-- شماره نودها (**N** / N*) و خطوط زیگ‌زاگ
-- تارگت‌های Node1 و Pair 1+2 (با حذف hit)
-- Density قرمز/زرد + پنل آمار
-
-## هنوز نیست (نسخه Pine)
-- Session boxes (NY/London/Tokyo)
-- Pivot Volume Profile (PoC/VAH/VAL)
-- Confluence zones کامل
 
 فایل Indicator: NCT.cs در ریشه پروژه و پوشه cTrader
 
