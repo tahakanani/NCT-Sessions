@@ -34,7 +34,7 @@ tf3 = input.timeframe('5',  'Timeframe 3', group = GRP5)
 tf4 = input.timeframe('15', 'Timeframe 4', group = GRP5)
 tf5 = input.timeframe('60', 'Timeframe 5', group = GRP5)
 
-trendConfirmBars = input.int(3, 'Trend Confirmation Bars (per TF)', minval = 1, maxval = 50, group = GRP5, tooltip = 'تعداد کندل تثبیت بیرون از Dispersion در همان تایم‌فریم')
+trendConfirmBars = input.int(3, 'Trend Confirmation Bars (per TF)', minval = 1, maxval = 50, group = GRP5, tooltip = 'فقط برای گیت تایید روش قدیمی؛ تعداد کندل تثبیت بیرون از Dispersion در همان تایم‌فریم')
 
 tf1_weight = input.int(1, 'TF1 Weight', minval = 1, maxval = 10, inline = 'w1', group = GRP5)
 tf2_weight = input.int(2, 'TF2 Weight', minval = 1, maxval = 10, inline = 'w1', group = GRP5)
@@ -42,7 +42,7 @@ tf3_weight = input.int(3, 'TF3 Weight', minval = 1, maxval = 10, inline = 'w1', 
 tf4_weight = input.int(4, 'TF4 Weight', minval = 1, maxval = 10, inline = 'w2', group = GRP5)
 tf5_weight = input.int(5, 'TF5 Weight', minval = 1, maxval = 10, inline = 'w2', group = GRP5)
 
-decisionThreshold = input.float(0.5, 'Decision Threshold (0-1)', minval = 0.01, maxval = 1.0, step = 0.05, inline = 'w3', group = GRP5)
+decisionThreshold = input.float(0.5, 'Decision Threshold (0-1)', minval = 0.01, maxval = 1.0, step = 0.05, inline = 'w3', group = GRP5, tooltip = 'فقط برای گیت تایید روش قدیمی؛ آستانهٔ رای‌گیری وزنی ۵ تایم‌فریم')
 
 trendUpColor      = input.color(color.new(color.lime, 0), 'Final Bullish Color',      inline = 'w4', group = GRP5)
 trendDownColor    = input.color(color.new(color.red, 0),  'Final Bearish Color',      inline = 'w4', group = GRP5)
@@ -51,6 +51,33 @@ showTrendBg       = input.bool(true, 'Show Final Trend Background', inline = 'w5
 arrowSizeInput    = input.string('Normal', 'Trend Arrow Size', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge'], group = GRP5)
 
 arrowSize = arrowSizeInput == 'Tiny' ? size.tiny : arrowSizeInput == 'Small' ? size.small : arrowSizeInput == 'Large' ? size.large : arrowSizeInput == 'Huge' ? size.huge : size.normal
+
+//#endregion
+
+// ================================================================================================
+// بخش ۱-ج: موتور روند بر پایهٔ شیب RSI
+// ================================================================================================
+//#region ———————————————————— INPUTS (SLOPE ENGINE)
+
+var GRP6 = "Slope Trend Engine"
+slopeLen  = input.int(7,   'RSI Slope Length', minval = 2, maxval = 100, group = GRP6, tooltip = 'طول رگرسیون خطی برای شیب RSI؛ کوچک‌تر = واکنش سریع‌تر')
+normLen   = input.int(100, 'Slope Normalization Length', minval = 10, maxval = 500, group = GRP6, tooltip = 'شیب بر انحراف معیار تغییرات RSI در این طول تقسیم می‌شود تا تایم ۱ دقیقه و ۶۰ دقیقه هم‌مقیاس شوند')
+accelLen  = input.int(3,   'Acceleration Lookback', minval = 1, maxval = 50, group = GRP6, tooltip = 'شیب فعلی با شیب این تعداد کندل قبل مقایسه می‌شود؛ شتاب مثبت = روند در حال تقویت')
+
+wSlope    = input.float(3, 'Weight: RSI Slope',        minval = 0, maxval = 10, step = 0.5, inline = 'sw1', group = GRP6)
+wAccel    = input.float(1, 'Weight: Acceleration',     minval = 0, maxval = 10, step = 0.5, inline = 'sw1', group = GRP6)
+wPos      = input.float(2, 'Weight: Position vs Basis', minval = 0, maxval = 10, step = 0.5, inline = 'sw2', group = GRP6)
+wBasis    = input.float(2, 'Weight: Basis Slope',      minval = 0, maxval = 10, step = 0.5, inline = 'sw2', group = GRP6)
+
+rangeDamp  = input.float(0.35, 'Range Damping', minval = 0.0, maxval = 1.0, step = 0.05, inline = 'sq1', group = GRP6, tooltip = 'وقتی RSI داخل Dispersion است و باند در حال بسته شدن، امتیاز در این ضریب ضرب می‌شود')
+squeezeLen = input.int(5, 'Squeeze Lookback', minval = 1, maxval = 50, inline = 'sq1', group = GRP6)
+
+regimeEnter  = input.float(0.25, 'Regime Enter', minval = 0.01, maxval = 1.0, step = 0.05, inline = 'rg1', group = GRP6, tooltip = 'آستانهٔ ورود رژیم از تایم‌های بالا')
+regimeExit   = input.float(0.10, 'Regime Exit',  minval = 0.0,  maxval = 1.0, step = 0.05, inline = 'rg1', group = GRP6, tooltip = 'آستانهٔ خروج رژیم؛ کوچک‌تر از ورود تا با یک لمس برنگردد')
+triggerEnter = input.float(0.20, 'Trigger Enter', minval = 0.01, maxval = 1.0, step = 0.05, group = GRP6, tooltip = 'آستانهٔ فعال شدن از تایم‌های پایین')
+
+legacyGateMode = input.string('Must Agree', 'Legacy Dispersion Gate', options = ['Must Agree', 'Must Not Oppose', 'Off'], group = GRP6, tooltip = 'Must Agree = روند فقط وقتی اعلام شود که روش قدیمی هم موافق باشد | Must Not Oppose = کافی است مخالف نباشد | Off = فقط موتور شیب')
+showScoreLine  = input.bool(false, 'Show Trigger Score Line', group = GRP6, tooltip = 'امتیاز تریگر روی مقیاس ۰ تا ۱۰۰ نگاشت می‌شود تا تناقض‌ها دیده شوند')
 
 //#endregion
 
@@ -79,46 +106,103 @@ obosFillColor  = input.color(color.new(#d4d4d4, 95), 'OB/OS Fill Color', inline 
 
 string stdTicker = ticker.standard(syminfo.tickerid)
 
-// لایو: صعودی=1 / نزولی=-1 / رنج(Dispersion)=0
-f_trendLive() =>
+f_clamp1(float x) =>
+    na(x) ? 0.0 : math.max(math.min(x, 1.0), -1.0)
+
+// وضعیت یک تایم‌فریم: امتیاز پیوسته از شیب (score) + جهت روش قدیمی (legacyDir)
+// score در بازهٔ -1 تا +1 و بین تایم‌فریم‌ها هم‌مقیاس است
+f_tfState() =>
     r = ta.rsi(close, for_rsi)
     b = ta.ema(r, for_ma)
     d = for_mult * ta.stdev(r, for_ma)
     dispUp = b + ((2.0 * d) * for_sigma)
     dispDn = b - ((2.0 * d) * for_sigma)
     bool inDisp = r <= dispUp and r >= dispDn
+
+    // شیب خط برازش‌شدهٔ RSI به ازای هر کندل — آرام‌تر از اختلاف خام
+    float slopeRaw = ta.linreg(r, slopeLen, 0) - ta.linreg(r, slopeLen, 1)
+    float basisRaw = ta.linreg(b, slopeLen, 0) - ta.linreg(b, slopeLen, 1)
+    // شیب روی ۱ دقیقه و ۶۰ دقیقه اندازهٔ یکسان ندارد؛ با نوسان خود RSI هم‌مقیاس می‌شود
+    float rsiVol   = math.max(nz(ta.stdev(ta.change(r), normLen)), 1e-6)
+
+    float slopeN = f_clamp1(slopeRaw / rsiVol)
+    float accelN = f_clamp1(ta.change(slopeRaw, accelLen) / rsiVol)
+    float posN   = f_clamp1((r - b) / math.max(d, 1e-6))
+    float basisN = f_clamp1(basisRaw / rsiVol)
+
+    float wSum  = math.max(wSlope + wAccel + wPos + wBasis, 1e-6)
+    float score = (wSlope * slopeN + wAccel * accelN + wPos * posN + wBasis * basisN) / wSum
+    // باند در حال بسته شدن و RSI داخل Dispersion = رنج، نه روند
+    if inDisp and ta.change(d, squeezeLen) < 0
+        score := score * rangeDamp
+    score := f_clamp1(score)
+
+    // جهت روش قدیمی، فقط برای گیت تایید
     barsBull = ta.barssince(r < dispUp)
     barsBear = ta.barssince(r > dispDn)
     barsBull := na(barsBull) ? 9999 : barsBull
     barsBear := na(barsBear) ? 9999 : barsBear
-    int result = 0
+    int legacyDir = 0
     if inDisp
-        result := 0
+        legacyDir := 0
     else if barsBull >= trendConfirmBars
-        result := 1
+        legacyDir := 1
     else if barsBear >= trendConfirmBars
-        result := -1
-    result
+        legacyDir := -1
+
+    [score, legacyDir]
 
 // همه ۵ امتیاز همزمان اینجا حساب می‌شوند — کانتکست همیشه tf1 (لنگر)
 // تا روی چارت 1m و 5m و رنج‌بار همان جمع‌بندی لایو بیاید
 f_mtfBundle() =>
-    int t1 = f_trendLive()
-    int t2 = int(request.security(stdTicker, tf2, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
-    int t3 = int(request.security(stdTicker, tf3, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
-    int t4 = int(request.security(stdTicker, tf4, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
-    int t5 = int(request.security(stdTicker, tf5, f_trendLive(), barmerge.gaps_off, barmerge.lookahead_off))
+    [s1, l1] = f_tfState()
+    [s2, l2] = request.security(stdTicker, tf2, f_tfState(), barmerge.gaps_off, barmerge.lookahead_off)
+    [s3, l3] = request.security(stdTicker, tf3, f_tfState(), barmerge.gaps_off, barmerge.lookahead_off)
+    [s4, l4] = request.security(stdTicker, tf4, f_tfState(), barmerge.gaps_off, barmerge.lookahead_off)
+    [s5, l5] = request.security(stdTicker, tf5, f_tfState(), barmerge.gaps_off, barmerge.lookahead_off)
 
-    float bScore = (t1 == 1 ? tf1_weight : 0) + (t2 == 1 ? tf2_weight : 0) + (t3 == 1 ? tf3_weight : 0) + (t4 == 1 ? tf4_weight : 0) + (t5 == 1 ? tf5_weight : 0)
-    float sScore = (t1 == -1 ? tf1_weight : 0) + (t2 == -1 ? tf2_weight : 0) + (t3 == -1 ? tf3_weight : 0) + (t4 == -1 ? tf4_weight : 0) + (t5 == -1 ? tf5_weight : 0)
+    // رژیم = جهت مجاز از تایم‌های بالا | تریگر = لحظهٔ فعال شدن از تایم‌های پایین
+    float regW = math.max(tf4_weight + tf5_weight, 1e-6)
+    float trgW = math.max(tf1_weight + tf2_weight + tf3_weight, 1e-6)
+    float regimeScore  = (tf4_weight * s4 + tf5_weight * s5) / regW
+    float triggerScore = (tf1_weight * s1 + tf2_weight * s2 + tf3_weight * s3) / trgW
+
+    // هیسترزیس: ورود با regimeEnter، خروج با آستانهٔ کوچک‌تر
+    // بین این دو آستانه، رژیم قبلی حفظ می‌شود تا با یک لمس برنگردد
+    var int regimeState = 0
+    float exitLvl = math.min(regimeExit, regimeEnter)
+    int rs = regimeState
+    if regimeScore >= regimeEnter
+        rs := 1
+    else if regimeScore <= -regimeEnter
+        rs := -1
+    else if rs == 1 and regimeScore < exitLvl
+        rs := 0
+    else if rs == -1 and regimeScore > -exitLvl
+        rs := 0
+    regimeState := rs
+
+    int triggerDir = triggerScore >= triggerEnter ? 1 : triggerScore <= -triggerEnter ? -1 : 0
+    int slopeFinal = regimeState != 0 and triggerDir == regimeState ? regimeState : 0
+
+    // رای‌گیری وزنی روش قدیمی
+    float bScore = (l1 == 1 ? tf1_weight : 0) + (l2 == 1 ? tf2_weight : 0) + (l3 == 1 ? tf3_weight : 0) + (l4 == 1 ? tf4_weight : 0) + (l5 == 1 ? tf5_weight : 0)
+    float sScore = (l1 == -1 ? tf1_weight : 0) + (l2 == -1 ? tf2_weight : 0) + (l3 == -1 ? tf3_weight : 0) + (l4 == -1 ? tf4_weight : 0) + (l5 == -1 ? tf5_weight : 0)
     float need = decisionThreshold * (tf1_weight + tf2_weight + tf3_weight + tf4_weight + tf5_weight)
 
-    int ft = 0
+    int legacyFinal = 0
     if bScore >= need and bScore > sScore
-        ft := 1
+        legacyFinal := 1
     else if sScore >= need and sScore > bScore
-        ft := -1
-    [ft, bScore, sScore, t1, t2, t3, t4, t5]
+        legacyFinal := -1
+
+    int ft = slopeFinal
+    if legacyGateMode == 'Must Agree'
+        ft := slopeFinal == legacyFinal ? slopeFinal : 0
+    else if legacyGateMode == 'Must Not Oppose'
+        ft := legacyFinal != 0 and legacyFinal != slopeFinal ? 0 : slopeFinal
+
+    [ft, slopeFinal, legacyFinal, regimeScore, triggerScore, regimeState, s1, s2, s3, s4, s5]
 
 //#endregion
 
@@ -146,8 +230,19 @@ rsi_Red   = ta.crossunder(current_rsi, disp_down)
 // ================================================================================================
 //#region ———————————————————— MTF LIVE AGGREGATION
 
-[finalTrend, bullScore, bearScore, trend1, trend2, trend3, trend4, trend5] =
+[finalTrend, slopeTrend, legacyTrend, regimeScoreV, triggerScoreV, regimeStateV, sc1, sc2, sc3, sc4, sc5] =
      request.security(stdTicker, tf1, f_mtfBundle(), barmerge.gaps_off, barmerge.lookahead_off)
+
+int triggerDirV = triggerScoreV >= triggerEnter ? 1 : triggerScoreV <= -triggerEnter ? -1 : 0
+
+// دلیل خنثی ماندن روند نهایی، برای عیب‌یابی در تولتیپ
+string blockReason = ""
+if regimeStateV == 0
+    blockReason := "رژیم تایم‌های بالا خنثی است"
+else if triggerDirV != regimeStateV
+    blockReason := "تریگر تایم‌های پایین هم‌جهت رژیم نیست"
+else if finalTrend == 0
+    blockReason := "روش قدیمی Dispersion تایید نکرد"
 
 color finalTrendColor = finalTrend == 1 ? trendUpColor : finalTrend == -1 ? trendDownColor : trendNeutralColor
 
@@ -178,11 +273,13 @@ fill(s1, s2, showDispersion ? dispFillColor : na)
 color finalRsiColor = enableTrendDetection ? finalTrendColor : color_rsi
 plot(current_rsi, 'RSI', color = finalRsiColor, linewidth = 3)
 
+plot(showScoreLine and enableTrendDetection ? 50 + triggerScoreV * 50 : na, 'Trigger Score', color = color.new(color.orange, 20), linewidth = 1)
+
 // فلش لایو: هر بار فلش قبلی پاک → فلش جدید از جمع‌بندی ۵TF
 var label arrowLabel = na
 
-f_tfStatus(int t) =>
-    t == 1 ? "صعودی" : t == -1 ? "نزولی" : "رنج(0)"
+f_dirTxt(int t) =>
+    t == 1 ? "صعودی" : t == -1 ? "نزولی" : "رنج"
 
 if enableTrendDetection and barstate.islast
     if not na(arrowLabel)
@@ -191,17 +288,21 @@ if enableTrendDetection and barstate.islast
     string arrowText = finalTrend == 1 ? "▲" : finalTrend == -1 ? "▼" : "→"
     color arrowColor = finalTrend == 1 ? color.lime : finalTrend == -1 ? color.red : color.white
     string tip =
-         "جمع‌بندی لایو ۵ تایم‌فریم\n" +
+         "موتور شیب RSI — جمع‌بندی لایو ۵ تایم‌فریم\n" +
          "━━━━━━━━━━━━━━━━━━\n" +
-         tf1 + ": " + f_tfStatus(trend1) + "\n" +
-         tf2 + ": " + f_tfStatus(trend2) + "\n" +
-         tf3 + ": " + f_tfStatus(trend3) + "\n" +
-         tf4 + ": " + f_tfStatus(trend4) + "\n" +
-         tf5 + ": " + f_tfStatus(trend5) + "\n" +
+         tf1 + ": " + str.tostring(sc1, "0.00") + "\n" +
+         tf2 + ": " + str.tostring(sc2, "0.00") + "\n" +
+         tf3 + ": " + str.tostring(sc3, "0.00") + "\n" +
+         tf4 + ": " + str.tostring(sc4, "0.00") + "\n" +
+         tf5 + ": " + str.tostring(sc5, "0.00") + "\n" +
          "━━━━━━━━━━━━━━━━━━\n" +
-         "امتیاز صعودی: " + str.tostring(bullScore, "#") + "\n" +
-         "امتیاز نزولی: " + str.tostring(bearScore, "#") + "\n" +
-         "روند نهایی: " + (finalTrend == 1 ? "صعودی" : finalTrend == -1 ? "نزولی" : "رنج")
+         "رژیم (" + tf4 + " + " + tf5 + "): " + str.tostring(regimeScoreV, "0.00") + " → " + f_dirTxt(regimeStateV) + "\n" +
+         "تریگر (" + tf1 + " … " + tf3 + "): " + str.tostring(triggerScoreV, "0.00") + " → " + f_dirTxt(triggerDirV) + "\n" +
+         "موتور شیب: " + f_dirTxt(slopeTrend) + "\n" +
+         "روش قدیمی: " + f_dirTxt(legacyTrend) + "\n" +
+         "━━━━━━━━━━━━━━━━━━\n" +
+         "روند نهایی: " + f_dirTxt(finalTrend) +
+         (blockReason == "" ? "" : "\nعلت خنثی: " + blockReason)
 
     arrowLabel := label.new(bar_index, current_rsi, arrowText,
          xloc = xloc.bar_index, yloc = yloc.price,

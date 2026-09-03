@@ -567,6 +567,11 @@ text_node_size_sym   = input.string('Large', 'Node Label Font (With Symmetry)', 
 text_node_size_nosym = input.string('Normal', 'Node Label Font (Without Symmetry)', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_FONT, tooltip = 'اندازه عدد نود وقتی شمارش بدون سیمتری است')
 targetLabelSize = input.string('Tiny', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_FONT, tooltip = 'اندازه نوشته روی خطوط تارگت (نود، زوج، رند، سشن، Day OC)')
 
+var GRP_AGEW = "Target Width by Node Age"
+targetWidthNew = input.int(1, 'New Nodes Width', minval = 1, maxval = 5, group = GRP_AGEW, tooltip = 'یک‌سوم جدیدترین نودهای روی چارت (نود ۱، نود ۲، زوج ۱۲)')
+targetWidthMid = input.int(2, 'Mid Nodes Width', minval = 1, maxval = 5, group = GRP_AGEW, tooltip = 'یک‌سوم میانی نودهای روی چارت')
+targetWidthOld = input.int(3, 'Old Nodes Width', minval = 1, maxval = 5, group = GRP_AGEW, tooltip = 'یک‌سوم قدیمی‌ترین نودهای روی چارت؛ ضخیم‌تر دیده می‌شوند')
+
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 // ضابطه: نوشته از وسط بدنهٔ خط شروع می‌شود و فقط در صورت تداخل به راست می‌رود؛
 // هرگز به نوک خط نمی‌چسبد (جا برای خودِ متن با style_label_left می‌ماند).
@@ -676,6 +681,12 @@ labelYForRow(float price, int row) =>
 
 styleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
+
+// drawnIndexOldestFirst = 0 قدیمی‌ترین نودِ رسم‌شده؛ drawnCount-1 جدیدترین
+ageRankWidth(int drawnIndexOldestFirst, int drawnCount) =>
+    int fromNew = drawnCount <= 1 ? 0 : drawnCount - 1 - drawnIndexOldestFirst
+    int third = math.max(1, int(drawnCount / 3))
+    fromNew < third ? targetWidthNew : fromNew < third * 2 ? targetWidthMid : targetWidthOld
 
 // lane: 0 صعود، 1 نزول، 2 سشن/سایر
 // خط تارگت نود از کندل نود (چپ) تا آینده؛ اگر نود خیلی عقب باشد تا ۴۹۰ کندل clamp می‌شود
@@ -805,7 +816,7 @@ method computeNodeColors(series NDS this, array<Node> nodesRef) =>
 // ================================================================================================
 // تارگت‌های نود ۱ (Double.1 + 0.8DL.1 + Min + 1.3MIN1 + Correction)
 // ================================================================================================
-method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, bool showNode2Target, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio, float minDblProxTolPct, float proxRadiusPct, int proxRadiusBars, color proxColor, int proxFillTransp) =>
+method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble, bool showDouble15, bool showDouble086, bool showMin, bool showCorrection, bool showBasedMin13, bool showNode2Target, int doubleWidth, int double15Width, int double086Width, int minWidth, int correctionWidth, string doubleStyle, string double15Style, string double086Style, string minStyle, string correctionStyle, int maxCount, int gapBars, bool deleteHit, int hitGraceBars, int lineTransparency, float double086Ratio, float double15Ratio, float min085Ratio, float basedRetraceRatio, float basedMinExtRatio, float minDblProxTolPct, float proxRadiusPct, int proxRadiusBars, color proxColor, int proxFillTransp, bool showBasedMin114, float basedRetrace114Ratio, float basedMinExt114Ratio) =>
     array<Node> nodesRef = swUptrendType ? this.nodesUp : this.nodesDown
     trendPrefix = swUptrendType ? "H " : "L "
     int lane = swUptrendType ? 0 : 1
@@ -824,6 +835,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                 qualifyingTotal += 1
 
     skipCount = math.max(qualifyingTotal - maxCount, 0)
+    int drawnTotal = qualifyingTotal - skipCount
     seen = 0
     if countNodes > 0
         for i = 0 to countNodes - 1
@@ -833,6 +845,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                     if not canDrawLine() or not canDrawLabel()
                         break
                     node = nodesRef.get(i)
+                    int ageW = ageRankWidth(seen - skipCount - 1, drawnTotal)
                     lineColor = colorPerIndex.get(i)
                     // لگاریتم‌ها یک‌بار حساب می‌شوند و بین همهٔ تارگت‌های همین نود مشترک‌اند
                     float logHigh = math.log(node.highNode)
@@ -845,7 +858,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                     if showDouble
                         bool shouldDelete = shouldDeleteHitTarget(targetDoublePrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node.indexNode, targetDoublePrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double.1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetDoublePrice, lineColor, ageW, doubleStyle, lineTransparency, trendPrefix + "Double.1", gapBars, lane)
 
                     // اگر برای این نود ۱، نود ۲ تشکیل شده باشد، تارگت‌های 1.5DL.1 و 0.8DL.1 لازم نیستند
                     bool hasNode2 = i + 1 < countNodes and nodesRef.get(i + 1).numberNode == 2
@@ -857,7 +870,7 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         targetDouble15Price = swUptrendType ? math.exp(logHigh + moveSizeLog * double15Ratio) : math.exp(logHigh - moveSizeLog * double15Ratio)
                         bool shouldDelete15 = shouldDeleteHitTarget(targetDouble15Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete15
-                            drawTargetLineLabel(node.indexNode, targetDouble15Price, lineColor, double15Width, double15Style, lineTransparency, trendPrefix + "1.5DL.1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetDouble15Price, lineColor, ageW, double15Style, lineTransparency, trendPrefix + "1.5DL.1", gapBars, lane)
 
                     float proxMinPrice = na
                     float proxDbl086Price = na
@@ -868,20 +881,20 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         bool shouldDelete086 = shouldDeleteHitTarget(targetDouble086Price, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete086
                             proxDbl086Price := targetDouble086Price
-                            drawTargetLineLabel(node.indexNode, targetDouble086Price, lineColor, double086Width, double086Style, lineTransparency, trendPrefix + "0.8DL.1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetDouble086Price, lineColor, ageW, double086Style, lineTransparency, trendPrefix + "0.8DL.1", gapBars, lane)
 
                     if showMin
                         targetMinPrice = swUptrendType ? math.exp(logCorr + moveSizeLog) : math.exp(logCorr - moveSizeLog)
                         bool shouldDelete = shouldDeleteHitTarget(targetMinPrice, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
                             proxMinPrice := targetMinPrice
-                            drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetMinPrice, lineColor, ageW, minStyle, lineTransparency, trendPrefix + "Min 1", gapBars, lane)
                         // فقط وقتی نود ۲ بعدی ناقص است؛ با کامل شدن نود ۲ دیگر رسم نمی‌شود
                         if node2Incomplete
                             float targetMin085Price = swUptrendType ? math.exp(logCorr + moveSizeLog * min085Ratio) : math.exp(logCorr - moveSizeLog * min085Ratio)
                             bool shouldDelete085 = shouldDeleteHitTarget(targetMin085Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                             if not shouldDelete085
-                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "0.8Min.1", gapBars, lane)
+                                drawTargetLineLabel(node.indexNode, targetMin085Price, lineColor, ageW, minStyle, lineTransparency, trendPrefix + "0.8Min.1", gapBars, lane)
 
                     // دایره سبز Min1 ↔ 0.8DL.1 : هر نود ۱ روی چارت بدون نود ۲ کامل
                     // X = ابتدای بخش راست خط تارگت (کندل جاری)، نه وسط خط و نه کندل قدیمی نود
@@ -906,13 +919,19 @@ method drawingTargetsNode1(series NDS this, bool swUptrendType, bool showDouble,
                         float targetBasedMin13 = swUptrendType ? math.exp(logCorr + moveSizeLog * basedMinExtRatio) : math.exp(logCorr - moveSizeLog * basedMinExtRatio)
                         bool shouldDeleteBased = shouldDeleteHitTarget(targetBasedMin13, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDeleteBased
-                            drawTargetLineLabel(node.indexNode, targetBasedMin13, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "1.3MIN1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetBasedMin13, lineColor, ageW, minStyle, lineTransparency, trendPrefix + "1.3MIN1", gapBars, lane)
+
+                    if showBasedMin114 and moveSizeLog > 0 and correctionSizeLog >= moveSizeLog * basedRetrace114Ratio and node2NotComplete
+                        float targetBasedMin114 = swUptrendType ? math.exp(logCorr + moveSizeLog * basedMinExt114Ratio) : math.exp(logCorr - moveSizeLog * basedMinExt114Ratio)
+                        bool shouldDeleteBased114 = shouldDeleteHitTarget(targetBasedMin114, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
+                        if not shouldDeleteBased114
+                            drawTargetLineLabel(node.indexNode, targetBasedMin114, lineColor, ageW, minStyle, lineTransparency, trendPrefix + "1.14MIN1", gapBars, lane)
 
                     if showCorrection
                         targetCorrectionPrice = swUptrendType ? math.exp(logHigh + correctionSizeLog) : math.exp(logHigh - correctionSizeLog)
                         bool shouldDelete = shouldDeleteHitTarget(targetCorrectionPrice, node.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Cr.1", gapBars, lane)
+                            drawTargetLineLabel(node.indexNode, targetCorrectionPrice, lineColor, ageW, correctionStyle, lineTransparency, trendPrefix + "Cr.1", gapBars, lane)
 
 // ================================================================================================
 // تارگت نود ۲ (Node 2 Target): اندازه حرکت نود ۲ از انتهای اصلاح همان نود
@@ -936,6 +955,7 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
                 qualifyingTotal += 1
 
     skipCount = math.max(qualifyingTotal - maxCount, 0)
+    int drawnTotal = qualifyingTotal - skipCount
     seen = 0
     if countNodes > 0 and showNode2
         for i = 0 to countNodes - 1
@@ -945,13 +965,14 @@ method drawingTargetsNode2(series NDS this, bool swUptrendType, bool showNode2, 
                     if not canDrawLine() or not canDrawLabel()
                         break
                     node = nodesRef.get(i)
+                    int ageW = ageRankWidth(seen - skipCount - 1, drawnTotal)
                     lineColor = colorPerIndex.get(i)
                     float logCorr2 = math.log(node.lowCorrection)
                     moveSizeLog2 = math.abs(math.log(node.highNode) - math.log(node.lowPreNode))
                     targetNode2Price = swUptrendType ? math.exp(logCorr2 + moveSizeLog2) : math.exp(logCorr2 - moveSizeLog2)
                     bool shouldDelete = shouldDeleteHitTarget(targetNode2Price, node.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                     if not shouldDelete
-                        drawTargetLineLabel(node.indexNode, targetNode2Price, lineColor, node2Width, node2Style, lineTransparency, trendPrefix + "Node 2", gapBars, lane)
+                        drawTargetLineLabel(node.indexNode, targetNode2Price, lineColor, ageW, node2Style, lineTransparency, trendPrefix + "Node 2", gapBars, lane)
 
 // ================================================================================================
 // تارگت‌های زوج نود ۱ و ۲ مرتبط به هم (Node1+Node2 Pair Targets)
@@ -976,6 +997,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                 pairTotal += 1
 
     skipCount = math.max(pairTotal - maxCount, 0)
+    int drawnTotal = pairTotal - skipCount
     seen = 0
     if countNodes > 1
         for i = 0 to countNodes - 2
@@ -986,6 +1008,7 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                         break
                     node1 = nodesRef.get(i)
                     node2 = nodesRef.get(i+1)
+                    int ageW = ageRankWidth(seen - skipCount - 1, drawnTotal)
                     lineColor = colorPerIndex.get(i)
                     float logN2High = math.log(node2.highNode)
                     float logN1Corr = math.log(node1.lowCorrection)
@@ -996,26 +1019,26 @@ method drawingPairTargetsNode12(series NDS this, bool swUptrendType, bool showMi
                         minPrice = swUptrendType ? math.exp(logN1Corr + totalMoveLog) : math.exp(logN1Corr - totalMoveLog)
                         bool shouldDelete = shouldDeleteHitTarget(minPrice, node1.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node1.indexNode, minPrice, lineColor, minWidth, minStyle, lineTransparency, trendPrefix + "Min 12", gapBars, lane)
+                            drawTargetLineLabel(node1.indexNode, minPrice, lineColor, ageW, minStyle, lineTransparency, trendPrefix + "Min 12", gapBars, lane)
 
                     if showMax
                         maxPrice = swUptrendType ? math.exp(logN2Corr + totalMoveLog) : math.exp(logN2Corr - totalMoveLog)
                         bool shouldDelete = shouldDeleteHitTarget(maxPrice, node2.indexCorrection, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node2.indexNode, maxPrice, lineColor, maxWidth, maxStyle, lineTransparency, trendPrefix + "Max 12", gapBars, lane)
+                            drawTargetLineLabel(node2.indexNode, maxPrice, lineColor, ageW, maxStyle, lineTransparency, trendPrefix + "Max 12", gapBars, lane)
 
                     if showDouble
                         dblPrice = swUptrendType ? math.exp(logN2High + totalMoveLog) : math.exp(logN2High - totalMoveLog)
                         bool shouldDelete = shouldDeleteHitTarget(dblPrice, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node2.indexNode, dblPrice, lineColor, doubleWidth, doubleStyle, lineTransparency, trendPrefix + "Double 12", gapBars, lane)
+                            drawTargetLineLabel(node2.indexNode, dblPrice, lineColor, ageW, doubleStyle, lineTransparency, trendPrefix + "Double 12", gapBars, lane)
 
                     if showCorrection
                         correctionSizeLog2 = math.abs(logN2High - logN2Corr)
                         corrPrice12 = swUptrendType ? math.exp(logN2High + correctionSizeLog2) : math.exp(logN2High - correctionSizeLog2)
                         bool shouldDelete = shouldDeleteHitTarget(corrPrice12, node2.indexNode, swUptrendType, deleteHit, hitGraceBars)
                         if not shouldDelete
-                            drawTargetLineLabel(node2.indexNode, corrPrice12, lineColor, correctionWidth, correctionStyle, lineTransparency, trendPrefix + "Correction 2", gapBars, lane)
+                            drawTargetLineLabel(node2.indexNode, corrPrice12, lineColor, ageW, correctionStyle, lineTransparency, trendPrefix + "Correction 2", gapBars, lane)
 
 //#endregion
 
@@ -1134,10 +1157,13 @@ showTargetDouble086Input  = input.bool(true, 'Show Target 0.8DL.1 (start→Doubl
 double086Ratio            = input.float(0.85, '0.8DL.1 Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نسبت مسیر از ابتدای نود ۱ تا Double؛ پیش‌فرض ۰.۸۵')
 showTargetMinInput        = input.bool(true, 'Show Target Min (from correction end)', group = GRP6)
 min085Ratio               = input.float(0.85, '0.8Min.1 Ratio (incomplete Node 2)', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'فقط وقتی نود ۲ ناقص است کنار Min 1 رسم می‌شود؛ با کامل شدن نود ۲ حذف می‌شود')
-showTargetBasedMin13Input = input.bool(true, 'Show 1.3MIN1 (Based Node 1)', group = GRP6, tooltip = 'فقط برای نود ۱ بیس‌شده (اصلاح ≥ Based Retrace). تا قبل از کامل شدن نود ۲ می‌ماند')
-basedRetraceRatio         = input.float(0.85, 'Based Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'نود ۱ بیس می‌شود اگر اصلاح لگاریتمی‌اش به این نسبت از حرکت خودش برسد؛ پیش‌فرض ۰.۸۵')
-basedMinExtRatio          = input.float(1.3, 'Based Min Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.3MIN1 روی نود ۱ بیس‌شده؛ پیش‌فرض ۱.۳')
-minDblProximityTolPct     = input.float(0.15, 'Proximity Tolerance (%) Min1↔0.8DL.1 and Double.1↔Node2', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'اگر فاصلهٔ نسبی این جفت‌تارگت‌ها کمتر/مساوی این درصد باشد، دایره سبز روی همهٔ نودهای روی چارت گذاشته می‌شود: Min1 با 0.8DL.1 ، و Double.1 با Node 2')
+showTargetBasedMin13Input = input.bool(true, 'Show 1.3MIN1 (Based Node 1)', group = GRP6, tooltip = 'فقط برای نود ۱ بیس‌شده با ضریب اصلاح خودش. تا قبل از کامل شدن نود ۲ می‌ماند')
+basedRetraceRatio         = input.float(0.85, '1.3MIN1 Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'شرط بیس فقط برای 1.3MIN1؛ اگر اصلاح لگاریتمی ≥ این نسبت از حرکت نود باشد رسم می‌شود')
+basedMinExtRatio          = input.float(1.3, '1.3MIN1 Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.3MIN1؛ پیش‌فرض ۱.۳')
+showTargetBasedMin114Input = input.bool(true, 'Show 1.14MIN1 (Based Node 1)', group = GRP6, tooltip = 'مستقل از 1.3MIN1؛ شرط بیس و ضریب گسترش جدا دارد. تا قبل از کامل شدن نود ۲ می‌ماند')
+basedRetrace114Ratio      = input.float(0.85, '1.14MIN1 Retrace Ratio', minval = 0.01, maxval = 2.0, step = 0.01, group = GRP6, tooltip = 'شرط بیس فقط برای 1.14MIN1؛ اگر اصلاح لگاریتمی ≥ این نسبت از حرکت نود باشد رسم می‌شود')
+basedMinExt114Ratio       = input.float(1.14, '1.14MIN1 Extension', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'ضریب Min 1 برای تارگت 1.14MIN1؛ پیش‌فرض ۱.۱۴')
+minDblProximityTolPct     = input.float(0.01, 'Proximity Tolerance (%) Min1↔0.8DL.1 and Double.1↔Node2', minval = 0.01, maxval = 5.0, step = 0.01, group = GRP6, tooltip = 'اگر فاصلهٔ نسبی این جفت‌تارگت‌ها کمتر/مساوی این درصد باشد، دایره سبز روی همهٔ نودهای روی چارت گذاشته می‌شود: Min1 با 0.8DL.1 ، و Double.1 با Node 2')
 showTargetCorrectionInput = input.bool(false, 'Show Target Correction (from node peak, correction size)', group = GRP6)
 targetDoubleWidth     = input.int(1, 'Target Double Line Width', minval = 1, maxval = 4, group = GRP6)
 targetDouble15Width   = input.int(1, 'Target 1.5DL.1 Line Width', minval = 1, maxval = 4, group = GRP6)
@@ -1559,10 +1585,6 @@ openLineStyle = input.string('Solid', 'Open Line Style', options = ['Solid', 'Da
 closeLineStyle = input.string('Dotted', 'Close Line Style', options = ['Solid', 'Dashed', 'Dotted'], inline = 'dayoc_st', group = GRP_DAYOC)
 openLineTransparency = input.int(0, 'Open Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
 closeLineTransparency = input.int(0, 'Close Line Transparency', minval = 0, maxval = 100, inline = 'dayoc_tr', group = GRP_DAYOC)
-line_length_factor_1m = input.int(130, 'Line Length Factor (1m)', minval = 1, group = GRP_DAYOC)
-line_length_factor_5m = input.int(24, 'Line Length Factor (5m)', minval = 1, group = GRP_DAYOC)
-line_length_factor_15m = input.int(7, 'Line Length Factor (15m)', minval = 1, group = GRP_DAYOC)
-line_length_factor_other = input.int(10, 'Line Length Factor (Other TF)', minval = 1, group = GRP_DAYOC)
 showDayOCBox = input.bool(false, 'Show Day Open/Close Panel', group = GRP_DAYOC, tooltip = 'یک باکس در سمت راست نمودار که قیمت اپن امروز و کلوز دیروز را نشان می‌دهد')
 dayOCBoxBgColor = input.color(color.new(color.blue, 85), 'Panel Background Color', group = GRP_DAYOC)
 
@@ -1592,7 +1614,7 @@ formatUtcOffsetTz(float hoursOffset) =>
 
 // MAP Weekly — سطوح هفتهٔ قبل (مانند MAPWeekly.cs)
 var GRP_MAPW = "MAP Weekly Targets"
-enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. بعد از تارگت قیمتی رسم می‌شود؛ نزدیک‌ترین به قیمت زنده نگه داشته می‌شود.')
+enableMapWeekly = input.bool(true, 'Show MAP Weekly Targets', group = GRP_MAPW, tooltip = 'حدود ۱۳ خط از High/Low هفتهٔ قبل. روی تایم رنج فقط ۲ خط نزدیک بالای قیمت لحظه‌ای و ۲ خط نزدیک پایین آن رسم می‌شود.')
 mapShowHigh = input.bool(true, 'Show Weekly High', inline = 'map_key', group = GRP_MAPW)
 mapShowLow  = input.bool(true, 'Show Weekly Low', inline = 'map_key', group = GRP_MAPW)
 mapShowMid  = input.bool(true, 'Show 50% Mid', inline = 'map_mid', group = GRP_MAPW)
@@ -1620,14 +1642,6 @@ mapLineColor = input.color(#C084FC, 'MAP Line Color', group = GRP_MAPW)
 
 dayOcStyleFromString(string s) =>
     s == 'Solid' ? line.style_solid : s == 'Dashed' ? line.style_dashed : line.style_dotted
-
-line_length_factor = switch
-    timeframe.isminutes and timeframe.period == "1" => line_length_factor_1m
-    timeframe.isminutes and timeframe.period == "5" => line_length_factor_5m
-    timeframe.isminutes and timeframe.period == "15" => line_length_factor_15m
-    => line_length_factor_other
-
-line_length = math.round(line_length_factor * 10)
 
 // هفتهٔ قبل از کندل استاندارد — روی Range/Renko نباید از tickerid چارت استفاده شود
 // چون tickerid نوع چارت را داخل خودش دارد و Weekly اشتباه می‌سازد
@@ -1728,25 +1742,68 @@ drawAllMapWeeklyLevels() =>
 
             int nMap = mapPx.size()
             float refPx = close
-            if nMap > 1
-                for i = 1 to nMap - 1
-                    float p = mapPx.get(i)
-                    int w = mapW.get(i)
-                    string s = mapSt.get(i)
-                    float d = math.abs(p - refPx)
-                    int j = i
-                    while j > 0 and math.abs(mapPx.get(j - 1) - refPx) > d
-                        mapPx.set(j, mapPx.get(j - 1))
-                        mapW.set(j, mapW.get(j - 1))
-                        mapSt.set(j, mapSt.get(j - 1))
-                        j -= 1
-                    mapPx.set(j, p)
-                    mapW.set(j, w)
-                    mapSt.set(j, s)
+            // in_seconds روی رنج عدد تخمینی می‌دهد و na نیست — تشخیص درست chart.is_range است
+            bool isRangeChart = chart.is_range or str.endswith(str.upper(timeframe.period), "R")
 
-            if nMap > 0
+            if isRangeChart and nMap > 0
+                int iA1 = -1
+                int iA2 = -1
+                int iB1 = -1
+                int iB2 = -1
+                float dA1 = 1.0e99
+                float dA2 = 1.0e99
+                float dB1 = 1.0e99
+                float dB2 = 1.0e99
                 for i = 0 to nMap - 1
-                    drawMapWeeklyLevel(mapPx.get(i), mapLineColor, mapW.get(i), mapSt.get(i), startIdx, endIdx)
+                    float p = mapPx.get(i)
+                    if p > refPx
+                        float d = p - refPx
+                        if d < dA1
+                            dA2 := dA1
+                            iA2 := iA1
+                            dA1 := d
+                            iA1 := i
+                        else if d < dA2
+                            dA2 := d
+                            iA2 := i
+                    else if p < refPx
+                        float d = refPx - p
+                        if d < dB1
+                            dB2 := dB1
+                            iB2 := iB1
+                            dB1 := d
+                            iB1 := i
+                        else if d < dB2
+                            dB2 := d
+                            iB2 := i
+                if iA1 >= 0
+                    drawMapWeeklyLevel(mapPx.get(iA1), mapLineColor, mapW.get(iA1), mapSt.get(iA1), startIdx, endIdx)
+                if iA2 >= 0
+                    drawMapWeeklyLevel(mapPx.get(iA2), mapLineColor, mapW.get(iA2), mapSt.get(iA2), startIdx, endIdx)
+                if iB1 >= 0
+                    drawMapWeeklyLevel(mapPx.get(iB1), mapLineColor, mapW.get(iB1), mapSt.get(iB1), startIdx, endIdx)
+                if iB2 >= 0
+                    drawMapWeeklyLevel(mapPx.get(iB2), mapLineColor, mapW.get(iB2), mapSt.get(iB2), startIdx, endIdx)
+            else
+                if nMap > 1
+                    for i = 1 to nMap - 1
+                        float p = mapPx.get(i)
+                        int w = mapW.get(i)
+                        string s = mapSt.get(i)
+                        float d = math.abs(p - refPx)
+                        int j = i
+                        while j > 0 and math.abs(mapPx.get(j - 1) - refPx) > d
+                            mapPx.set(j, mapPx.get(j - 1))
+                            mapW.set(j, mapW.get(j - 1))
+                            mapSt.set(j, mapSt.get(j - 1))
+                            j -= 1
+                        mapPx.set(j, p)
+                        mapW.set(j, w)
+                        mapSt.set(j, s)
+
+                if nMap > 0
+                    for i = 0 to nMap - 1
+                        drawMapWeeklyLevel(mapPx.get(i), mapLineColor, mapW.get(i), mapSt.get(i), startIdx, endIdx)
 
 // اپن امروز / کلوز دیروز از کندل روزانه استاندارد — مستقل از تایم‌فریم چارت (دقیقه یا رنج)
 [dayOpenRaw, yestCloseRaw, dayBarTime] = if showDayOpenLine or showDayCloseLine or showDayOCBox
@@ -1756,40 +1813,10 @@ else
 
 var float open_today_price = na
 var float close_yesterday_price = na
-var int dayLockedTime = na
-var int dayCountOpenClose = 0
 
 if not na(dayOpenRaw) and not na(yestCloseRaw)
     open_today_price := dayOpenRaw
     close_yesterday_price := yestCloseRaw
-    if not na(dayBarTime) and (na(dayLockedTime) or dayBarTime != dayLockedTime)
-        dayLockedTime := dayBarTime
-        dayCountOpenClose += 1
-
-// Reuse 2 var lines — avoid creating a new line on every bar
-var line dayOpenHistLine = na
-var line dayCloseHistLine = na
-openLnStyle = dayOcStyleFromString(openLineStyle)
-closeLnStyle = dayOcStyleFromString(closeLineStyle)
-if dayCountOpenClose <= 2
-    if showDayOpenLine and not na(open_today_price)
-        if na(dayOpenHistLine)
-            dayOpenHistLine := line.new(bar_index, open_today_price, bar_index - line_length, open_today_price, color = color.new(open_line_color, openLineTransparency), width = openLineWidth, style = openLnStyle)
-        else
-            line.set_xy1(dayOpenHistLine, bar_index, open_today_price)
-            line.set_xy2(dayOpenHistLine, bar_index - line_length, open_today_price)
-            line.set_color(dayOpenHistLine, color.new(open_line_color, openLineTransparency))
-            line.set_width(dayOpenHistLine, openLineWidth)
-            line.set_style(dayOpenHistLine, openLnStyle)
-    if showDayCloseLine and not na(close_yesterday_price)
-        if na(dayCloseHistLine)
-            dayCloseHistLine := line.new(bar_index, close_yesterday_price, bar_index - line_length, close_yesterday_price, color = color.new(close_line_color, closeLineTransparency), width = closeLineWidth, style = closeLnStyle)
-        else
-            line.set_xy1(dayCloseHistLine, bar_index, close_yesterday_price)
-            line.set_xy2(dayCloseHistLine, bar_index - line_length, close_yesterday_price)
-            line.set_color(dayCloseHistLine, color.new(close_line_color, closeLineTransparency))
-            line.set_width(dayCloseHistLine, closeLineWidth)
-            line.set_style(dayCloseHistLine, closeLnStyle)
 
 // ================================================================================================
 // بخش ج: ثبت سقف/کف/میدلاین هر سشن به‌عنوان تارگت + اپن/کلوز روزانه + پنل
@@ -1829,9 +1856,9 @@ if bar_index == last_bar_index
 
     if enableSingleNode1Targets
         if showTargetNode1Up
-            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, enableSingleNode2Targets and showTargetNode2Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, proximityMarkerRadiusPct, proximityMarkerRadiusBars, proximityMarkerColor, proximityMarkerFillTransparency)
+            cTarget.drawingTargetsNode1(true,  showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, enableSingleNode2Targets and showTargetNode2Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, proximityMarkerRadiusPct, proximityMarkerRadiusBars, proximityMarkerColor, proximityMarkerFillTransparency, showTargetBasedMin114Input, basedRetrace114Ratio, basedMinExt114Ratio)
         if showTargetNode1Down
-            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, enableSingleNode2Targets and showTargetNode2Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, proximityMarkerRadiusPct, proximityMarkerRadiusBars, proximityMarkerColor, proximityMarkerFillTransparency)
+            cTarget.drawingTargetsNode1(false, showTargetDoubleInput, showTargetDouble15Input, showTargetDouble086Input, showTargetMinInput, showTargetCorrectionInput, showTargetBasedMin13Input, enableSingleNode2Targets and showTargetNode2Input, targetDoubleWidth, targetDouble15Width, targetDouble086Width, targetMinWidth, targetCorrectionWidth, targetDoubleStyle, targetDouble15Style, targetDouble086Style, targetMinStyle, targetCorrectionStyle, targetNode1MaxCount, targetLabelGapBars, deleteHitTargets, hitGraceBarsInput, targetLineTransparency, double086Ratio, double15Ratio, min085Ratio, basedRetraceRatio, basedMinExtRatio, minDblProximityTolPct, proximityMarkerRadiusPct, proximityMarkerRadiusBars, proximityMarkerColor, proximityMarkerFillTransparency, showTargetBasedMin114Input, basedRetrace114Ratio, basedMinExt114Ratio)
 
     if enableSingleNode2Targets
         if showTargetNode1Up
@@ -1885,11 +1912,21 @@ if bar_index == last_bar_index
                 midD = (curmax_sesd + curmin_sesd) / 2
                 registerSessionTargetEx(midD, sesd_css, sesd_txt + " Mid", sessionMidLineWidth)
 
+    int dayStartIdx = bar_index
+    if not na(dayBarTime)
+        int look = math.min(bar_index, startPointInput)
+        dayStartIdx := bar_index - look
+        for i = 0 to look
+            if time[i] < dayBarTime
+                dayStartIdx := math.max(0, bar_index - i + 1)
+                break
+        dayStartIdx := math.max(0, math.min(dayStartIdx, bar_index))
+
     if showDayOpenLine and not na(open_today_price)
-        drawTargetLineLabel(bar_index, open_today_price, open_line_color, openLineWidth, openLineStyle, openLineTransparency, "H Day Open", targetLabelGapBars, 2, true)
+        drawTargetLineLabel(dayStartIdx, open_today_price, open_line_color, openLineWidth, openLineStyle, openLineTransparency, "H Day Open", targetLabelGapBars, 2, true)
 
     if showDayCloseLine and not na(close_yesterday_price)
-        drawTargetLineLabel(bar_index, close_yesterday_price, close_line_color, closeLineWidth, closeLineStyle, closeLineTransparency, "L Day Close", targetLabelGapBars, 2, true)
+        drawTargetLineLabel(dayStartIdx, close_yesterday_price, close_line_color, closeLineWidth, closeLineStyle, closeLineTransparency, "L Day Close", targetLabelGapBars, 2, true)
 
     if showDayOCBox and not na(open_today_price) and not na(close_yesterday_price)
         boxTop = math.max(open_today_price, close_yesterday_price)

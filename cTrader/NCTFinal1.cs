@@ -118,13 +118,22 @@ namespace cAlgo.Indicators
         [Parameter("Show 1.3MIN1", DefaultValue = true, Group = "Node 1 Targets (Single)")]
         public bool ShowBasedMin13 { get; set; }
 
-        [Parameter("Based Retrace Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node 1 Targets (Single)")]
+        [Parameter("1.3MIN1 Retrace Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node 1 Targets (Single)")]
         public double BasedRetraceRatio { get; set; }
 
-        [Parameter("Based Min Extension", DefaultValue = 1.3, MinValue = 0.01, MaxValue = 5.0, Group = "Node 1 Targets (Single)")]
+        [Parameter("1.3MIN1 Extension", DefaultValue = 1.3, MinValue = 0.01, MaxValue = 5.0, Group = "Node 1 Targets (Single)")]
         public double BasedMinExtRatio { get; set; }
 
-        [Parameter("Proximity Tolerance (%)", DefaultValue = 0.15, MinValue = 0.01, MaxValue = 5.0, Group = "Node 1 Targets (Single)")]
+        [Parameter("Show 1.14MIN1", DefaultValue = true, Group = "Node 1 Targets (Single)")]
+        public bool ShowBasedMin114 { get; set; }
+
+        [Parameter("1.14MIN1 Retrace Ratio", DefaultValue = 0.85, MinValue = 0.01, MaxValue = 2.0, Group = "Node 1 Targets (Single)")]
+        public double BasedRetrace114Ratio { get; set; }
+
+        [Parameter("1.14MIN1 Extension", DefaultValue = 1.14, MinValue = 0.01, MaxValue = 5.0, Group = "Node 1 Targets (Single)")]
+        public double BasedMinExt114Ratio { get; set; }
+
+        [Parameter("Proximity Tolerance (%)", DefaultValue = 0.01, MinValue = 0.01, MaxValue = 5.0, Group = "Node 1 Targets (Single)")]
         public double MinDblProximityTolPct { get; set; }
 
         [Parameter("Show Target Correction", DefaultValue = false, Group = "Node 1 Targets (Single)")]
@@ -162,6 +171,15 @@ namespace cAlgo.Indicators
 
         [Parameter("Last Nodes to Target", DefaultValue = 30, MinValue = 1, MaxValue = 100, Group = "Node 1 Targets (Single)")]
         public int TargetNode1MaxCount { get; set; }
+
+        [Parameter("New Nodes Width", DefaultValue = 1, MinValue = 1, MaxValue = 5, Group = "Target Width by Node Age")]
+        public int TargetWidthNew { get; set; }
+
+        [Parameter("Mid Nodes Width", DefaultValue = 2, MinValue = 1, MaxValue = 5, Group = "Target Width by Node Age")]
+        public int TargetWidthMid { get; set; }
+
+        [Parameter("Old Nodes Width", DefaultValue = 3, MinValue = 1, MaxValue = 5, Group = "Target Width by Node Age")]
+        public int TargetWidthOld { get; set; }
 
         // ───────────────────────── Node 2 Target ─────────────────────────
 
@@ -2074,7 +2092,10 @@ namespace cAlgo.Indicators
               .Append(EnableMapWeekly).Append('|')
               .Append(ShowDayOpenLine).Append('|')
               .Append(ShowDayCloseLine).Append('|')
-              .Append(EnableTimeTargets);
+              .Append(EnableTimeTargets).Append('|')
+              .Append(TargetWidthNew).Append('|')
+              .Append(TargetWidthMid).Append('|')
+              .Append(TargetWidthOld);
 
             AppendNodesFingerprint(sb, _nodesUp);
             AppendNodesFingerprint(sb, _nodesDown);
@@ -2255,6 +2276,19 @@ namespace cAlgo.Indicators
             return slot / perBand;
         }
 
+        private int WidthByAgeRank(int drawnIndexOldestFirst, int drawnCount)
+        {
+            if (drawnCount <= 1)
+                return TargetWidthNew;
+            int fromNew = drawnCount - 1 - drawnIndexOldestFirst;
+            int third = Math.Max(1, drawnCount / 3);
+            if (fromNew < third)
+                return TargetWidthNew;
+            if (fromNew < third * 2)
+                return TargetWidthMid;
+            return TargetWidthOld;
+        }
+
         private void DrawTargetLineLabel(int startIdx, double price, Color lineCol, int width, string styleStr,
             int transp, string txt, int gapBars, int lane, bool pinToStart, bool labelBeforeLine = false)
         {
@@ -2422,6 +2456,7 @@ namespace cAlgo.Indicators
                 return;
 
             int skip = Math.Max(qualifies.Count - TargetNode1MaxCount, 0);
+            int drawnCount = qualifies.Count - skip;
             string trendPrefix = swUptrendType ? "H " : "L ";
             int lane = swUptrendType ? 0 : 1;
             Color[] colorByNode = ComputeNodeColors(nodes);
@@ -2432,13 +2467,14 @@ namespace cAlgo.Indicators
             {
                 int i = qualifies[q];
                 var node = nodes[i];
+                int ageW = WidthByAgeRank(q - skip, drawnCount);
                 Color lineColor = colorByNode[i];
                 double moveSizeLog = TgtMove(node.LowPreNode, node.HighNode);
                 double correctionSizeLog = TgtMove(node.LowCorrection, node.HighNode);
                 double targetDoublePrice = TgtProject(node.HighNode, moveSizeLog, swUptrendType);
 
                 if (ShowDouble && !ShouldDeleteHitTarget(targetDoublePrice, node.IndexNode, swUptrendType))
-                    DrawTargetLineLabel(node.IndexNode, targetDoublePrice, lineColor, DoubleLineWidth, DoubleLineStyle,
+                    DrawTargetLineLabel(node.IndexNode, targetDoublePrice, lineColor, ageW, DoubleLineStyle,
                         TargetTransparency, trendPrefix + "Double.1", TargetGapBars, lane, false);
 
                 bool hasNode2 = i + 1 < nodes.Count && nodes[i + 1].NumberNode == 2;
@@ -2449,7 +2485,7 @@ namespace cAlgo.Indicators
                 {
                     double p15 = TgtProject(node.HighNode, moveSizeLog * Double15Ratio, swUptrendType);
                     if (!ShouldDeleteHitTarget(p15, node.IndexNode, swUptrendType))
-                        DrawTargetLineLabel(node.IndexNode, p15, lineColor, Double15LineWidth, Double15LineStyle,
+                        DrawTargetLineLabel(node.IndexNode, p15, lineColor, ageW, Double15LineStyle,
                             TargetTransparency, trendPrefix + "1.5DL.1", TargetGapBars, lane, false);
                 }
 
@@ -2462,7 +2498,7 @@ namespace cAlgo.Indicators
                     if (!ShouldDeleteHitTarget(p086, node.IndexNode, swUptrendType))
                     {
                         prox086 = p086;
-                        DrawTargetLineLabel(node.IndexNode, p086, lineColor, Double086LineWidth, Double086LineStyle,
+                        DrawTargetLineLabel(node.IndexNode, p086, lineColor, ageW, Double086LineStyle,
                             TargetTransparency, trendPrefix + "0.8DL.1", TargetGapBars, lane, false);
                     }
                 }
@@ -2473,7 +2509,7 @@ namespace cAlgo.Indicators
                     if (!ShouldDeleteHitTarget(minPrice, node.IndexCorrection, swUptrendType))
                     {
                         proxMin = minPrice;
-                        DrawTargetLineLabel(node.IndexNode, minPrice, lineColor, MinLineWidth, MinLineStyle,
+                        DrawTargetLineLabel(node.IndexNode, minPrice, lineColor, ageW, MinLineStyle,
                             TargetTransparency, trendPrefix + "Min 1", TargetGapBars, lane, false);
                     }
 
@@ -2481,7 +2517,7 @@ namespace cAlgo.Indicators
                     {
                         double min085 = TgtProject(node.LowCorrection, moveSizeLog * Min085Ratio, swUptrendType);
                         if (!ShouldDeleteHitTarget(min085, node.IndexCorrection, swUptrendType))
-                            DrawTargetLineLabel(node.IndexNode, min085, lineColor, MinLineWidth, MinLineStyle,
+                            DrawTargetLineLabel(node.IndexNode, min085, lineColor, ageW, MinLineStyle,
                                 TargetTransparency, trendPrefix + "0.8Min.1", TargetGapBars, lane, false);
                     }
                 }
@@ -2505,15 +2541,23 @@ namespace cAlgo.Indicators
                 {
                     double based = TgtProject(node.LowCorrection, moveSizeLog * BasedMinExtRatio, swUptrendType);
                     if (!ShouldDeleteHitTarget(based, node.IndexCorrection, swUptrendType))
-                        DrawTargetLineLabel(node.IndexNode, based, lineColor, MinLineWidth, MinLineStyle,
+                        DrawTargetLineLabel(node.IndexNode, based, lineColor, ageW, MinLineStyle,
                             TargetTransparency, trendPrefix + "1.3MIN1", TargetGapBars, lane, false);
+                }
+
+                if (ShowBasedMin114 && moveSizeLog > 0 && correctionSizeLog >= moveSizeLog * BasedRetrace114Ratio && node2NotComplete)
+                {
+                    double based114 = TgtProject(node.LowCorrection, moveSizeLog * BasedMinExt114Ratio, swUptrendType);
+                    if (!ShouldDeleteHitTarget(based114, node.IndexCorrection, swUptrendType))
+                        DrawTargetLineLabel(node.IndexNode, based114, lineColor, ageW, MinLineStyle,
+                            TargetTransparency, trendPrefix + "1.14MIN1", TargetGapBars, lane, false);
                 }
 
                 if (ShowCorrection)
                 {
                     double corr = TgtProject(node.HighNode, correctionSizeLog, swUptrendType);
                     if (!ShouldDeleteHitTarget(corr, node.IndexNode, swUptrendType))
-                        DrawTargetLineLabel(node.IndexNode, corr, lineColor, CorrectionLineWidth, CorrectionLineStyle,
+                        DrawTargetLineLabel(node.IndexNode, corr, lineColor, ageW, CorrectionLineStyle,
                             TargetTransparency, trendPrefix + "Cr.1", TargetGapBars, lane, false);
                 }
             }
@@ -2535,6 +2579,7 @@ namespace cAlgo.Indicators
                 return;
 
             int skip = Math.Max(qualifies.Count - TargetNode2MaxCount, 0);
+            int drawnCount = qualifies.Count - skip;
             string trendPrefix = swUptrendType ? "H " : "L ";
             int lane = swUptrendType ? 0 : 1;
             Color[] colorByNode = ComputeNodeColors(nodes);
@@ -2543,10 +2588,11 @@ namespace cAlgo.Indicators
             {
                 int i = qualifies[q];
                 var node = nodes[i];
+                int ageW = WidthByAgeRank(q - skip, drawnCount);
                 double price = TgtProject(node.LowCorrection, TgtMove(node.LowPreNode, node.HighNode), swUptrendType);
                 if (ShouldDeleteHitTarget(price, node.IndexCorrection, swUptrendType))
                     continue;
-                DrawTargetLineLabel(node.IndexNode, price, colorByNode[i], Node2LineWidth, Node2LineStyle,
+                DrawTargetLineLabel(node.IndexNode, price, colorByNode[i], ageW, Node2LineStyle,
                     TargetTransparency, trendPrefix + "Node 2", TargetGapBars, lane, false);
             }
         }
@@ -2567,6 +2613,7 @@ namespace cAlgo.Indicators
                 return;
 
             int skip = Math.Max(pairStarts.Count - PairTargetMaxCount, 0);
+            int drawnCount = pairStarts.Count - skip;
             string trendPrefix = swUptrendType ? "H " : "L ";
             int lane = swUptrendType ? 0 : 1;
             Color[] colorByNode = ComputeNodeColors(nodes);
@@ -2576,6 +2623,7 @@ namespace cAlgo.Indicators
                 int i = pairStarts[p];
                 var node1 = nodes[i];
                 var node2 = nodes[i + 1];
+                int ageW = WidthByAgeRank(p - skip, drawnCount);
                 Color lineColor = colorByNode[i];
                 double totalMove = TgtMove(node1.LowPreNode, node2.HighNode);
 
@@ -2583,7 +2631,7 @@ namespace cAlgo.Indicators
                 {
                     double price = TgtProject(node1.LowCorrection, totalMove, swUptrendType);
                     if (!ShouldDeleteHitTarget(price, node1.IndexCorrection, swUptrendType))
-                        DrawTargetLineLabel(node1.IndexNode, price, lineColor, PairMinWidth, PairMinStyle,
+                        DrawTargetLineLabel(node1.IndexNode, price, lineColor, ageW, PairMinStyle,
                             TargetTransparency, trendPrefix + "Min 12", TargetGapBars, lane, false);
                 }
 
@@ -2591,7 +2639,7 @@ namespace cAlgo.Indicators
                 {
                     double price = TgtProject(node2.LowCorrection, totalMove, swUptrendType);
                     if (!ShouldDeleteHitTarget(price, node2.IndexCorrection, swUptrendType))
-                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, PairMaxWidth, PairMaxStyle,
+                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, ageW, PairMaxStyle,
                             TargetTransparency, trendPrefix + "Max 12", TargetGapBars, lane, false);
                 }
 
@@ -2599,7 +2647,7 @@ namespace cAlgo.Indicators
                 {
                     double price = TgtProject(node2.HighNode, totalMove, swUptrendType);
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
-                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, PairDoubleWidth, PairDoubleStyle,
+                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, ageW, PairDoubleStyle,
                             TargetTransparency, trendPrefix + "Double 12", TargetGapBars, lane, false);
                 }
 
@@ -2608,7 +2656,7 @@ namespace cAlgo.Indicators
                     double corr = TgtMove(node2.LowCorrection, node2.HighNode);
                     double price = TgtProject(node2.HighNode, corr, swUptrendType);
                     if (!ShouldDeleteHitTarget(price, node2.IndexNode, swUptrendType))
-                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, PairCorrectionWidth, PairCorrectionStyle,
+                        DrawTargetLineLabel(node2.IndexNode, price, lineColor, ageW, PairCorrectionStyle,
                             TargetTransparency, trendPrefix + "Correction 2", TargetGapBars, lane, false);
                 }
             }
@@ -2658,28 +2706,53 @@ namespace cAlgo.Indicators
             }
         }
 
+        private void DrawDayOcLine(DateTime dayStart, DateTime now, double price, Color col, int width, string styleStr, int transp, string txt)
+        {
+            if (double.IsNaN(price) || double.IsInfinity(price) || now <= dayStart)
+                return;
+
+            int lastIndex = Bars.Count - 1;
+            Color drawCol = WithAlpha(col, transp);
+            Chart.DrawTrendLine(NextName("DayOC"), dayStart, price, now, price, drawCol, width, ParseLineStyle(styleStr));
+
+            int lblX = GetStaggerX(price, lastIndex, 2, lastIndex, true);
+            int row = GetStaggerRow(price, 2, true);
+            var text = Chart.DrawText(NextName("DayOCLbl"), txt, TimeAtIndex(lblX), LabelYForRow(price, row), col);
+            text.FontSize = TargetFontSizeValue();
+            text.VerticalAlignment = VerticalAlignment.Center;
+            text.HorizontalAlignment = HorizontalAlignment.Left;
+        }
+
         private void DrawingDayOpenClose()
         {
             if (_dailyBars == null)
             {
                 try { _dailyBars = MarketData.GetBars(TimeFrame.Daily); } catch { return; }
             }
-            if (_dailyBars == null || _dailyBars.Count < 1)
+            if (_dailyBars == null || _dailyBars.Count < 1 || Bars.Count < 1)
                 return;
 
             int lastIndex = Bars.Count - 1;
+            DateTime dayStart = _dailyBars.LastBar.OpenTime;
+            if (dayStart < Bars.OpenTimes[0])
+                dayStart = Bars.OpenTimes[0];
+
+            DateTime now = Bars.OpenTimes[lastIndex];
+            if (Server != null && Server.Time > now)
+                now = Server.Time;
+
             double openToday = _dailyBars.LastBar.Open;
             double closeYesterday = _dailyBars.Count >= 2 ? _dailyBars[_dailyBars.Count - 2].Close : double.NaN;
             Color openCol = ParseColor(OpenLineColorName, Color.Lime);
             Color closeCol = ParseColor(CloseLineColorName, Color.Red);
 
             if (ShowDayOpenLine && openToday > 0 && !double.IsNaN(openToday))
-                DrawTargetLineLabel(lastIndex, openToday, openCol, OpenLineWidth, OpenLineStyle,
-                    OpenLineTransparency, "H Day Open", TargetGapBars, 2, true);
+                DrawDayOcLine(dayStart, now, openToday, openCol, OpenLineWidth, OpenLineStyle,
+                    OpenLineTransparency, "H Day Open");
 
             if (ShowDayCloseLine && closeYesterday > 0 && !double.IsNaN(closeYesterday))
-                DrawTargetLineLabel(lastIndex, closeYesterday, closeCol, CloseLineWidth, CloseLineStyle,
-                    CloseLineTransparency, "L Day Close", TargetGapBars, 2, true);
+                DrawDayOcLine(dayStart, now, closeYesterday, closeCol, CloseLineWidth, CloseLineStyle,
+                    CloseLineTransparency, "L Day Close");
 
             if (ShowDayOCBox && openToday > 0 && closeYesterday > 0 && !double.IsNaN(openToday) && !double.IsNaN(closeYesterday))
             {
