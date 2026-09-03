@@ -561,6 +561,12 @@ var g_stagDnX     = array.new<int>()
 var g_stagOtPrice = array.new<float>()
 var g_stagOtX     = array.new<int>()
 
+// --- ورودی‌های فونت (ثابت؛ کاربر یک‌بار در تنظیمات انتخاب می‌کند) ---
+var GRP_FONT = "Fonts"
+text_node_size_sym   = input.string('Large', 'Node Label Font (With Symmetry)', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_FONT, tooltip = 'اندازه عدد نود وقتی شمارش با سیمتری است')
+text_node_size_nosym = input.string('Normal', 'Node Label Font (Without Symmetry)', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_FONT, tooltip = 'اندازه عدد نود وقتی شمارش بدون سیمتری است')
+targetLabelSize = input.string('Tiny', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_FONT, tooltip = 'اندازه نوشته روی خطوط تارگت (نود، زوج، رند، سشن، Day OC)')
+
 // --- ورودی‌های تنظیم تداخل لیبل‌ها ---
 // ضابطه: نوشته از وسط بدنهٔ خط شروع می‌شود و فقط در صورت تداخل به راست می‌رود؛
 // هرگز به نوک خط نمی‌چسبد (جا برای خودِ متن با style_label_left می‌ماند).
@@ -570,7 +576,6 @@ targetLabelColumns = input.int(2, 'Label Columns', minval = 1, maxval = 6, group
 targetLabelRowStepPct = input.float(0.02, 'Extra Row Offset (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'وقتی همهٔ ستون‌ها و میانه‌ها پر شوند، دور بعدی این مقدار بالاتر می‌رود تا نوشته‌ها روی هم نیفتند. ۰ = خاموش')
 targetLabelStaggerStep = input.int(13, 'Label Stagger Step (bars)', minval = 4, maxval = 200, group = GRP_LBL, tooltip = 'فقط وقتی Label Columns = ۱ است؛ گام جابجایی از وسط به راست')
 targetLabelYOffsetPct = input.float(0.001, 'Label Height Above Line (%)', minval = 0.0, maxval = 2.0, step = 0.001, group = GRP_LBL, tooltip = 'فاصلهٔ عمودی نوشته بالای خط؛ با گام ۰.۰۱ قابل تنظیم است (مثلاً ۰.۰۱ یا ۰.۰۲)')
-targetLabelSize = input.string('Tiny', 'Target Label Font Size', options = ['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'], group = GRP_LBL, tooltip = 'اندازه فونت نوشته روی همه تارگت‌ها (نود، زوج، رند، سشن، Day OC)')
 
 priceNearLabel(float a, float b) =>
     refP = math.max(math.max(math.abs(a), math.abs(b)), 0.0000001)
@@ -1168,8 +1173,6 @@ pairCorrectionStyle = input.string('Dotted', 'Pair Target Correction Line Style'
 pairTargetMaxCount = input.int(30, 'Number of Last Pairs to Target', minval = 1, maxval = 100, group = GRP7)
 
 var GRP3 = "Visual Customization"
-text_node_size_sym   = input.string('Large', title='Font Size (With Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
-text_node_size_nosym = input.string('Normal', title='Font Size (Without Symmetry)', group= GRP3, options=['Auto', 'Huge', 'Large', 'Normal', 'Small', 'Tiny'])
 nodeLabelPadUp   = input.int(0, 'Node Label Distance — Up (lines)', minval = 0, maxval = 8, inline = "nld", group = GRP3, tooltip = 'فاصله عدد نود صعود از قله. ۰ = روی خود نود. ۱ به بالا = خط خالی. با زوم و تایم‌فریم عوض نمی‌شود')
 nodeLabelPadDown = input.int(0, 'Node Label Distance — Down (lines)', minval = 0, maxval = 8, inline = "nld", group = GRP3, tooltip = 'فاصله عدد نود نزول از کف. ۰ = زیر خود نود، نه داخل کندل. ۱ به بالا = فاصله بیشتر')
 incompleteNode2RadiusPct = input.float(0.004, 'Incomplete Node 2 Circle Radius (%)', minval = 0.001, maxval = 5.0, step = 0.001, group = GRP3, tooltip = 'شعاع عمودی دایره قرمز نسبت به قیمت محل تشکیل نود ۲ ناقص')
