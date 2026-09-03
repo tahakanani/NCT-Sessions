@@ -11,7 +11,6 @@ namespace cAlgo.Indicators
     [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class NCTFinal1 : Indicator
     {
-
         // ───────────────────────── Nodal / Strategy ─────────────────────────
 
         [Parameter("Starting Point Candles", DefaultValue = 4000, MinValue = 1, MaxValue = 5000, Group = "Nodal Calculation Settings")]
@@ -642,6 +641,7 @@ namespace cAlgo.Indicators
         private readonly List<int> _stagOtX = new List<int>();
 
         private int _objSeq;
+        private readonly List<string> _drawnNames = new List<string>();
         private string _lastDrawSignature;
         private int _lastDrawBarIndex = -1;
         private double _lastLiveHigh = double.NaN;
@@ -658,6 +658,27 @@ namespace cAlgo.Indicators
         private int _indexLowestDown;
         private double _priceHighestDown;
         private int _indexHighestDown;
+
+        private readonly List<Node> _closedUp = new List<Node>();
+        private readonly List<Node> _closedDown = new List<Node>();
+        private double _closedLowestUp = 999999.0;
+        private int _closedIndexLowestUp;
+        private double _closedHighestUp;
+        private int _closedIndexHighestUp;
+        private double _closedLowestDown = 999999.0;
+        private int _closedIndexLowestDown;
+        private double _closedHighestDown;
+        private int _closedIndexHighestDown;
+        private bool _hasClosedSnapshot;
+        private int _engineKey = int.MinValue;
+        private int _engineMin = -1;
+        private int _closedProcessed = -1;
+        private int _liveAppliedIndex = -1;
+
+        private int _loadBarCount = -1;
+        private int _timerBarCount = -1;
+        private int _stablePumps;
+        private bool _chartReady;
 
         private Bars _dailyBars;
         private Bars _weeklyBars;
@@ -680,7 +701,7 @@ namespace cAlgo.Indicators
             try { _dailyBars = MarketData.GetBars(TimeFrame.Daily); } catch { }
             try { _weeklyBars = MarketData.GetBars(TimeFrame.Weekly); } catch { }
             try { _m1Bars = MarketData.GetBars(TimeFrame.Minute); } catch { }
-            try { Timer.Start(TimeSpan.FromSeconds(1)); } catch { }
+            try { Timer.Start(TimeSpan.FromSeconds(2)); } catch { }
         }
 
         protected override void OnDestroy()
@@ -695,7 +716,7 @@ namespace cAlgo.Indicators
             {
                 if (Bars == null || Bars.Count < 3)
                     return;
-                RebuildAndDraw();
+                Pump(true);
             }
             catch { }
         }
@@ -709,11 +730,11 @@ namespace cAlgo.Indicators
                     return;
 
                 // Custom TFs may skip historical Calculate(0..n) and only hit the last bar
-                // (or never fire at all — OnTimer covers that). Always rebuild on last bar.
+                // (or never fire at all — OnTimer covers that).
                 if (index != lastIndex)
                     return;
 
-                RebuildAndDraw();
+                Pump(false);
             }
             catch
             {
@@ -721,7 +742,7 @@ namespace cAlgo.Indicators
             }
         }
 
-        private void RebuildAndDraw()
+        private void Pump(bool fromTimer)
         {
             if (_rebuilding)
                 return;
@@ -733,102 +754,35 @@ namespace cAlgo.Indicators
                 if (lastIndex < 2)
                     return;
 
+                NoteBarCount(fromTimer);
+
                 double liveHigh = Bars.HighPrices[lastIndex];
                 double liveLow = Bars.LowPrices[lastIndex];
                 double liveClose = Bars.ClosePrices[lastIndex];
                 bool liveBull = liveClose >= Bars.OpenPrices[lastIndex];
-                // Skip only when this bar has not moved in a way that can change nodes or hits.
-                if (_lastDrawBarIndex == lastIndex
+                if (_chartReady
                     && _lastDrawSignature != null
+                    && _lastDrawBarIndex == lastIndex
                     && _lastLiveHigh == liveHigh
                     && _lastLiveLow == liveLow
                     && _lastLiveBull == liveBull)
                     return;
 
-                string savedSig = _lastDrawSignature;
-                int savedBar = _lastDrawBarIndex;
+                SyncNodes();
 
-                ResetState();
-                InitColors();
-
-                int lookback = Math.Min(Math.Max(StartPoint, 1), lastIndex);
-                int min = Math.Max(1, lastIndex - lookback);
-                int max = lastIndex - Math.Max(EndPoint, 0);
-                if (max > lastIndex)
-                    max = lastIndex;
-                if (max <= min)
+                if (!_chartReady)
                     return;
 
-                for (int i = min + 1; i <= max; i++)
-                {
-                    CalcNodeUpTrend(i);
-                    CalcNodeDownTrend(i);
-                }
+                // Tick/range bars mutate the last node every quote. Recalc in memory,
+                // but only repaint on a new bar or on the 2s timer (hits / live node).
+                if (!fromTimer && _lastDrawSignature != null && _lastDrawBarIndex == lastIndex)
+                    return;
 
                 string signature = BuildDrawSignature(lastIndex);
-                if (signature == savedSig && savedBar == lastIndex)
-                {
-                    _lastDrawSignature = savedSig;
-                    _lastDrawBarIndex = savedBar;
-                    _lastLiveHigh = liveHigh;
-                    _lastLiveLow = liveLow;
-                    _lastLiveClose = liveClose;
-                    _lastLiveBull = liveBull;
+                if (signature == _lastDrawSignature && _lastDrawBarIndex == lastIndex)
                     return;
-                }
 
-                RemoveDrawings();
-                ResetLabelStagger();
-                _objSeq = 0;
-
-                bool underline = !UseSymmetry;
-                int extraGap = UseSymmetry ? VerticalGapLines : 0;
-                int padUp = NodeLabelPadUp;
-                int padDown = NodeLabelPadDown;
-
-                if (_nodesUp.Count > 0)
-                    DrawingNumberNodes(true, underline, extraGap, padUp);
-                if (_nodesDown.Count > 0)
-                    DrawingNumberNodes(false, underline, extraGap, padDown);
-
-                if (ShowTargetUp)
-                {
-                    if (EnableSingleNode1Targets)
-                        DrawingTargetsNode1(true);
-                    if (EnableSingleNode2Targets && ShowTargetNode2)
-                        DrawingTargetsNode2(true);
-                    if (EnablePairNode12Targets)
-                        DrawingPairTargetsNode12(true);
-                }
-
-                if (ShowTargetDown)
-                {
-                    if (EnableSingleNode1Targets)
-                        DrawingTargetsNode1(false);
-                    if (EnableSingleNode2Targets && ShowTargetNode2)
-                        DrawingTargetsNode2(false);
-                    if (EnablePairNode12Targets)
-                        DrawingPairTargetsNode12(false);
-                }
-
-                if (EnableRoundTargets)
-                {
-                    if (RoundApplyUp)
-                        DrawRoundNumberTargets(true, true);
-                    if (RoundApplyDown)
-                        DrawRoundNumberTargets(false, !RoundApplyUp);
-                }
-
-                DrawSessions();
-
-                if (ShowDayOpenLine || ShowDayCloseLine || ShowDayOCBox)
-                    DrawingDayOpenClose();
-
-                if (EnableMapWeekly)
-                    DrawMapWeekly();
-
-                if (EnableTimeTargets)
-                    DrawTimeTargets();
+                RedrawAll();
 
                 _lastDrawSignature = signature;
                 _lastDrawBarIndex = lastIndex;
@@ -843,6 +797,216 @@ namespace cAlgo.Indicators
             }
         }
 
+        private void NoteBarCount(bool fromTimer)
+        {
+            int count = Bars.Count;
+            if (fromTimer)
+            {
+                if (_timerBarCount == count && count > 2)
+                    _chartReady = true;
+                _timerBarCount = count;
+            }
+
+            if (count != _loadBarCount)
+            {
+                _loadBarCount = count;
+                _stablePumps = 0;
+                return;
+            }
+
+            _stablePumps++;
+            if (!_chartReady && _stablePumps >= 1)
+                _chartReady = true;
+        }
+
+        private int EngineKey()
+        {
+            int mode = UseSymmetry ? 1 : 0;
+            if (SwCalcLogarithm)
+                mode |= 2;
+            return (StartPoint * 397) ^ (EndPoint * 401) ^ mode;
+        }
+
+        private void SyncNodes()
+        {
+            int lastIndex = Bars.Count - 1;
+            int lookback = Math.Min(Math.Max(StartPoint, 1), lastIndex);
+            int min = Math.Max(1, lastIndex - lookback);
+            int max = lastIndex - Math.Max(EndPoint, 0);
+            if (max > lastIndex)
+                max = lastIndex;
+            if (max <= min)
+                return;
+
+            int key = EngineKey();
+            bool chartReset = lastIndex < _liveAppliedIndex;
+            bool windowSlid = _engineMin >= 0 && min - _engineMin >= 250;
+            if (key != _engineKey || chartReset || windowSlid || _liveAppliedIndex < min)
+            {
+                FullBuildNodes(min, max, lastIndex, key);
+                return;
+            }
+
+            if (lastIndex > _liveAppliedIndex)
+            {
+                if (_liveAppliedIndex >= min)
+                {
+                    SaveClosedSnapshot();
+                    _closedProcessed = _liveAppliedIndex;
+                }
+
+                int from = Math.Max(_liveAppliedIndex + 1, min + 1);
+                int closedTo = Math.Min(max, lastIndex - 1);
+                for (int i = from; i <= closedTo; i++)
+                {
+                    CalcNodeUpTrend(i);
+                    CalcNodeDownTrend(i);
+                    _closedProcessed = i;
+                }
+
+                if (_closedProcessed >= min)
+                    SaveClosedSnapshot();
+
+                if (max == lastIndex)
+                {
+                    CalcNodeUpTrend(lastIndex);
+                    CalcNodeDownTrend(lastIndex);
+                }
+                _liveAppliedIndex = lastIndex;
+                return;
+            }
+
+            RestoreClosedSnapshot();
+            if (max == lastIndex)
+            {
+                CalcNodeUpTrend(lastIndex);
+                CalcNodeDownTrend(lastIndex);
+            }
+        }
+
+        private void FullBuildNodes(int min, int max, int lastIndex, int key)
+        {
+            ResetState();
+            InitColors();
+            _engineKey = key;
+            _engineMin = min;
+            _hasClosedSnapshot = false;
+
+            int closedTo = Math.Min(max, lastIndex - 1);
+            for (int i = min + 1; i <= closedTo; i++)
+            {
+                CalcNodeUpTrend(i);
+                CalcNodeDownTrend(i);
+            }
+
+            _closedProcessed = closedTo;
+            if (closedTo >= min + 1)
+                SaveClosedSnapshot();
+
+            if (max == lastIndex && lastIndex > min)
+            {
+                CalcNodeUpTrend(lastIndex);
+                CalcNodeDownTrend(lastIndex);
+            }
+
+            _liveAppliedIndex = lastIndex;
+        }
+
+        private void SaveClosedSnapshot()
+        {
+            CopyNodes(_nodesUp, _closedUp);
+            CopyNodes(_nodesDown, _closedDown);
+            _closedLowestUp = _priceLowestUp;
+            _closedIndexLowestUp = _indexLowestUp;
+            _closedHighestUp = _priceHighestUp;
+            _closedIndexHighestUp = _indexHighestUp;
+            _closedLowestDown = _priceLowestDown;
+            _closedIndexLowestDown = _indexLowestDown;
+            _closedHighestDown = _priceHighestDown;
+            _closedIndexHighestDown = _indexHighestDown;
+            _hasClosedSnapshot = true;
+        }
+
+        private void RestoreClosedSnapshot()
+        {
+            if (!_hasClosedSnapshot)
+                return;
+            CopyNodes(_closedUp, _nodesUp);
+            CopyNodes(_closedDown, _nodesDown);
+            _priceLowestUp = _closedLowestUp;
+            _indexLowestUp = _closedIndexLowestUp;
+            _priceHighestUp = _closedHighestUp;
+            _indexHighestUp = _closedIndexHighestUp;
+            _priceLowestDown = _closedLowestDown;
+            _indexLowestDown = _closedIndexLowestDown;
+            _priceHighestDown = _closedHighestDown;
+            _indexHighestDown = _closedIndexHighestDown;
+        }
+
+        private static void CopyNodes(List<Node> src, List<Node> dest)
+        {
+            dest.Clear();
+            for (int i = 0; i < src.Count; i++)
+                dest.Add(src[i].Clone());
+        }
+
+        private void RedrawAll()
+        {
+            InitColors();
+            RemoveDrawings();
+            ResetLabelStagger();
+            _objSeq = 0;
+
+            bool underline = !UseSymmetry;
+            int extraGap = UseSymmetry ? VerticalGapLines : 0;
+            int padUp = NodeLabelPadUp;
+            int padDown = NodeLabelPadDown;
+
+            if (_nodesUp.Count > 0)
+                DrawingNumberNodes(true, underline, extraGap, padUp);
+            if (_nodesDown.Count > 0)
+                DrawingNumberNodes(false, underline, extraGap, padDown);
+
+            if (ShowTargetUp)
+            {
+                if (EnableSingleNode1Targets)
+                    DrawingTargetsNode1(true);
+                if (EnableSingleNode2Targets && ShowTargetNode2)
+                    DrawingTargetsNode2(true);
+                if (EnablePairNode12Targets)
+                    DrawingPairTargetsNode12(true);
+            }
+
+            if (ShowTargetDown)
+            {
+                if (EnableSingleNode1Targets)
+                    DrawingTargetsNode1(false);
+                if (EnableSingleNode2Targets && ShowTargetNode2)
+                    DrawingTargetsNode2(false);
+                if (EnablePairNode12Targets)
+                    DrawingPairTargetsNode12(false);
+            }
+
+            if (EnableRoundTargets)
+            {
+                if (RoundApplyUp)
+                    DrawRoundNumberTargets(true, true);
+                if (RoundApplyDown)
+                    DrawRoundNumberTargets(false, !RoundApplyUp);
+            }
+
+            DrawSessions();
+
+            if (ShowDayOpenLine || ShowDayCloseLine || ShowDayOCBox)
+                DrawingDayOpenClose();
+
+            if (EnableMapWeekly)
+                DrawMapWeekly();
+
+            if (EnableTimeTargets)
+                DrawTimeTargets();
+        }
+
         // ───────────────────────── Init / Reset ─────────────────────────
 
         private void ResetState()
@@ -851,6 +1015,9 @@ namespace cAlgo.Indicators
             _nodesDown.Clear();
             _colors.Clear();
             _objSeq = 0;
+            _closedUp.Clear();
+            _closedDown.Clear();
+            _hasClosedSnapshot = false;
 
             _priceLowestUp = 999999.0;
             _indexLowestUp = 0;
@@ -1050,6 +1217,23 @@ namespace cAlgo.Indicators
             public double AmountCorrection;
             public double LogAmountCorrection;
             public bool IsSymmetrySetup;
+
+            public Node Clone()
+            {
+                return new Node
+                {
+                    IndexPreNode = IndexPreNode,
+                    IndexNode = IndexNode,
+                    IndexCorrection = IndexCorrection,
+                    NumberNode = NumberNode,
+                    LowPreNode = LowPreNode,
+                    HighNode = HighNode,
+                    LowCorrection = LowCorrection,
+                    AmountCorrection = AmountCorrection,
+                    LogAmountCorrection = LogAmountCorrection,
+                    IsSymmetrySetup = IsSymmetrySetup
+                };
+            }
         }
 
         private static double SafeLog(double value)
@@ -1834,7 +2018,9 @@ namespace cAlgo.Indicators
         private string NextName(string kind)
         {
             _objSeq++;
-            return ObjectPrefix + kind + "_" + _objSeq;
+            string name = ObjectPrefix + kind + "_" + _objSeq;
+            _drawnNames.Add(name);
+            return name;
         }
 
         private int FontSizeValue()
@@ -1963,15 +2149,9 @@ namespace cAlgo.Indicators
 
         private void RemoveDrawings()
         {
-            var names = new List<string>();
-            foreach (var obj in Chart.Objects)
-            {
-                if (obj.Name != null && obj.Name.StartsWith(ObjectPrefix, StringComparison.Ordinal))
-                    names.Add(obj.Name);
-            }
-
-            for (int i = 0; i < names.Count; i++)
-                Chart.RemoveObject(names[i]);
+            for (int i = 0; i < _drawnNames.Count; i++)
+                Chart.RemoveObject(_drawnNames[i]);
+            _drawnNames.Clear();
         }
 
         private void ResetLabelStagger()
